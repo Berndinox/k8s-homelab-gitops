@@ -1,6 +1,6 @@
 #!/bin/bash
 # scripts/02-install-rke2-cilium.sh
-# Automated RKE2 + Cilium installation
+# Automated RKE2 + Cilium installation using HelmChartConfig (Option A - RECOMMENDED)
 # Run ONLY on Host03 (first/bootstrap node)
 
 set -e
@@ -31,12 +31,17 @@ cluster-cidr: $CLUSTER_CIDR
 service-cidr: $SERVICE_CIDR
 cluster-dns: 10.2.0.10
 
-# NO CNI - Cilium will be installed via manifests
-cni: none
+# CNI - Use RKE2's bundled Cilium
+cni: cilium
 
 # Disable unnecessary components
 disable:
   - rke2-ingress-nginx
+  - rke2-canal
+
+# Disable kube-proxy (Cilium will replace it)
+disable-kube-proxy: true
+write-kubeconfig-mode: "0644"
 
 # TLS SANs for all nodes
 tls-san:
@@ -54,37 +59,35 @@ tls-san:
 etcd-expose-metrics: true
 EOF
 
-# 3. Create Cilium manifest for auto-deployment
-echo "🐝 Creating Cilium auto-deploy manifest..."
+# 3. Create Cilium HelmChartConfig for customization
+echo "🐝 Creating Cilium HelmChartConfig..."
 mkdir -p /var/lib/rancher/rke2/server/manifests/
 
-tee /var/lib/rancher/rke2/server/manifests/rke2-cilium.yaml > /dev/null <<'EOF'
+tee /var/lib/rancher/rke2/server/manifests/rke2-cilium-config.yaml > /dev/null <<'EOF'
 ---
 apiVersion: helm.cattle.io/v1
-kind: HelmChart
+kind: HelmChartConfig
 metadata:
-  name: cilium
+  name: rke2-cilium
   namespace: kube-system
 spec:
-  chart: cilium
-  repo: https://helm.cilium.io/
-  targetNamespace: kube-system
-  version: 1.18.6
   valuesContent: |-
     # IPAM Configuration
     ipam:
       mode: kubernetes
-      operator:
-        clusterPoolIPv4PodCIDRList:
-          - 10.1.0.0/16
-    
+
     # Replace kube-proxy with eBPF
     kubeProxyReplacement: true
     k8sServiceHost: 127.0.0.1
     k8sServicePort: 6443
-    
+
+    # Operator Configuration
+    operator:
+      replicas: 1
+
     # Hubble Observability
     hubble:
+      enabled: true
       relay:
         enabled: true
       ui:
@@ -97,32 +100,26 @@ spec:
           - flow
           - icmp
           - http
-    
+
     # BGP Control Plane
     bgpControlPlane:
       enabled: true
-    
+
     # LoadBalancer
     externalIPs:
       enabled: true
     loadBalancer:
-      acceleration: native
-      mode: dsr
-    
-    # Network
+      mode: hybrid
+
+    # Network Configuration
     enableIPv4Masquerade: true
-    routingMode: tunnel
-    tunnelProtocol: vxlan
+    routingMode: native
+    autoDirectNodeRoutes: true
+    ipv4NativeRoutingCIDR: 10.1.0.0/16
+
+    # BPF Configuration
     bpf:
       masquerade: true
-    
-    # Devices for BGP
-    devices:
-      - bond0
-    
-    # Kubernetes
-    k8s:
-      requireIPv4PodCIDR: true
 EOF
 
 # 4. Start RKE2 (will auto-deploy Cilium!)
@@ -130,8 +127,6 @@ echo "🚀 Starting RKE2 (Cilium will be deployed automatically)..."
 systemctl enable rke2-server.service
 systemctl start rke2-server.service
 
-echo "⏳ Waiting for RKE2 to start (90 seconds)..."
-sleep 90
 
 # 5. Setup kubectl
 echo "🔧 Setting up kubectl..."
@@ -140,18 +135,49 @@ cp /etc/rancher/rke2/rke2.yaml ~/.kube/config
 chown $(id -u):$(id -g) ~/.kube/config
 ln -sf /var/lib/rancher/rke2/bin/kubectl /usr/local/bin/kubectl
 
-# 6. Wait for node to be Ready
+# 6. Wait for API to be responsive
+echo "⏳ Waiting for Kubernetes API..."
+for i in {1..30}; do
+  if kubectl get nodes &>/dev/null; then
+    echo "✅ Kubernetes API is ready!"
+    break
+  fi
+  echo "   Waiting for API... ($i/30)"
+  sleep 5
+done
+
+# 7. Check if Cilium pods exist
+echo "🔍 Checking Cilium deployment status..."
+sleep 10
+
+CILIUM_PODS=$(kubectl get pods -n kube-system -l k8s-app=cilium --no-headers 2>/dev/null | wc -l)
+
+if [ "$CILIUM_PODS" -eq 0 ]; then
+  echo "⚠️  No Cilium pods found yet, waiting for helm job to complete..."
+  kubectl wait --for=condition=complete job/helm-install-rke2-cilium -n kube-system --timeout=300s || true
+  sleep 20
+fi
+
+# 8. Restart Cilium pods (GitHub Issue #42179 solution)
+echo "🐝 Restarting Cilium agents (fix for bootstrap issue)..."
+kubectl delete pods -n kube-system -l k8s-app=cilium --ignore-not-found=true
+
+echo "⏳ Waiting for Cilium to become ready..."
+kubectl wait --for=condition=Ready pods -l k8s-app=cilium -n kube-system --timeout=300s
+
+# 9. Wait for node to be Ready
 echo "⏳ Waiting for node to be Ready..."
 for i in {1..30}; do
-  if kubectl get nodes 2>/dev/null | grep -q Ready; then
+  NODE_STATUS=$(kubectl get nodes -o jsonpath='{.items[0].status.conditions[?(@.type=="Ready")].status}' 2>/dev/null)
+  if [ "$NODE_STATUS" == "True" ]; then
     echo "✅ Node is Ready!"
     break
   fi
-  echo "   Waiting... ($i/30)"
+  echo "   Waiting for node... ($i/30)"
   sleep 10
 done
 
-# 7. Verification
+# 10. Verification
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "✅ Installation Complete!"
@@ -161,7 +187,7 @@ echo "📊 Node Status:"
 kubectl get nodes -o wide
 echo ""
 echo "🐝 Cilium Pods:"
-kubectl get pods -n kube-system -l app.kubernetes.io/name=cilium
+kubectl get pods -n kube-system -l k8s-app=cilium -o wide
 echo ""
 echo "📦 All System Pods:"
 kubectl get pods -n kube-system
@@ -172,7 +198,7 @@ cat /var/lib/rancher/rke2/server/node-token
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 echo "Next steps:"
-echo "1. Install ArgoCD: ./scripts/03-install-argocd.sh"
-echo "2. Push Git changes"
+echo "1. Verify Cilium: cilium status (install cilium CLI first)"
+echo "2. Install ArgoCD: ./scripts/03-install-argocd.sh"
 echo "3. Bootstrap ArgoCD: kubectl apply -f bootstrap/root-app.yaml"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

@@ -44,6 +44,9 @@ ip_vs_sh
 nf_conntrack
 vhost_net
 vhost_vsock
+vxlan
+geneve
+ip_tunnel
 EOF
 
 # Load modules now
@@ -57,6 +60,9 @@ modprobe ip_vs_sh
 modprobe nf_conntrack
 modprobe vhost_net
 modprobe vhost_vsock
+modprobe vxlan
+modprobe geneve
+modprobe ip_tunnel
 
 # 4. Sysctl settings
 echo "🔧 Configuring sysctl..."

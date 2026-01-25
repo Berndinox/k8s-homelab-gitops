@@ -5,12 +5,7 @@ set -e
 
 echo "🧹 Starting complete Kubernetes cleanup..."
 echo "⚠️  This will remove ALL Kubernetes components!"
-read -p "Continue? (y/N): " -n 1 -r
-echo
-if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    echo "Cancelled."
-    exit 1
-fi
+
 
 # 1. Stop services
 echo "🛑 Stopping services..."

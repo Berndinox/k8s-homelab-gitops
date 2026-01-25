@@ -283,4 +283,4 @@ sudo ./scripts/00-cleanup-host.sh
 curl -sSL https://raw.githubusercontent.com/Berndinox/k8s-homelab-gitops/main/scripts/00-cleanup-host.sh | sudo bash
 ```
 
-Then start from **Step 2** (OS Preparation) again.
+Then start from **Step 3** (Install RKE or 04 "Join Cluster") again.
