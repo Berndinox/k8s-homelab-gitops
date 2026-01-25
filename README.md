@@ -2,6 +2,8 @@
 
 GitOps-managed Kubernetes homelab cluster mit RKE2, Cilium CNI und ArgoCD.
 
+**Disclaimer**: Dieses Projekt wird „as is“ bereitgestellt. Es handelt sich um ein privates Hobbyprojekt ohne Garantie auf Funktion oder Sicherheit. Der Autor übernimmt keine Haftung für Schäden, die durch die Nutzung entstehen.
+
 ## 🎯 Cluster Overview
 
 **Infrastructure:**
@@ -246,13 +248,3 @@ kubectl get applications -n argocd
 - Missing modules = BPF compilation errors
 
 ---
-
-## 🆘 Support
-
-Bei Problemen:
-1. Check logs: `kubectl logs -n kube-system -l k8s-app=cilium`
-2. Check [docs/INSTALL-GUIDE.md](./docs/INSTALL-GUIDE.md)
-
----
-
-**Status:** ✅ Cluster Running | 🚧 GitOps Setup In Progress
