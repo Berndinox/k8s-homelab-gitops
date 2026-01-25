@@ -145,9 +145,9 @@ kubectl get applications -n argocd -w
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| RKE2 | ✅ Installed | Via install script |
-| Cilium CNI | ✅ Installed | VXLAN overlay, BGP enabled |
-| ArgoCD | ✅ Installed | Via install script |
+| RKE2 | ✅ Done | Via install script |
+| Cilium CNI | ✅ Done | VXLAN overlay, BGP enabled |
+| ArgoCD | ✅ Done | Via install script |
 
 ### Layer 2: GitOps Managed (via ArgoCD)
 
