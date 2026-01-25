@@ -8,7 +8,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/berndinox/k8s-cluster-gitops
+    repoURL: https://github.com/Berndinox/k8s-homelab-gitops
     targetRevision: main
     path: argocd-apps
   destination:
