@@ -9,47 +9,29 @@
 
 ---
 
-## Network Architecture
+## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                         BARE METAL INFRASTRUCTURE                           │
+│                              3-NODE HA CLUSTER                              │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
-│   ┌──────────────────┐    ┌──────────────────┐    ┌──────────────────┐    │
-│   │     host01       │    │     host02       │    │     host03       │    │
-│   │  10.0.100.101    │    │  10.0.100.102    │    │  10.0.100.103    │    │
-│   │                  │    │                  │    │  (Bootstrap)     │    │
-│   │  Control Plane   │    │  Control Plane   │    │  Control Plane   │    │
-│   │  + etcd          │    │  + etcd          │    │  + etcd          │    │
-│   └────┬────────┬────┘    └────┬────────┬────┘    └────┬────────┬────┘    │
-│        │        │              │        │              │        │          │
-│      eno1    bond0           eno1    bond0           eno1    bond0        │
-│        │   ┌──┴──┐            │   ┌──┴──┐            │   ┌──┴──┐         │
-│        │  10G  10G            │  10G  10G            │  10G  10G          │
-│        │   │    │             │   │    │             │   │    │           │
-│        │   │    │             │   │    │             │   │    │           │
-│  ┌─────┴───┴────┘             │   │    │             │   │    │           │
-│  │ TOR Switch (DHCP)          │   │    │             │   │    │           │
-│  │ Management Network    ┌────┴───┴────┴─────────────┴───┴────┴────────┐  │
-│  └───────────────────────┤ Distribution Switch - VLAN 100              │  │
-│                          │ Cluster Network (10.0.100.0/24)             │  │
-│                          └─────────────────────────────────────────────┘  │
+│    host01              host02              host03 (Bootstrap)              │
+│  10.0.100.101        10.0.100.102        10.0.100.103                       │
 │                                                                             │
-│  Management Network:  eno1 → TOR Switch (DHCP)                              │
-│  Cluster Network:     bond0 (2x10G LACP) → Distribution Switch (VLAN 100)  │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │  RKE2 Kubernetes (3x Control Plane + etcd)                          │   │
+│  │  ├─ Cilium CNI (eBPF, BGP, Hubble)                                  │   │
+│  │  ├─ Longhorn Storage (3x replica)                                   │   │
+│  │  ├─ Multus (multi-NIC)                                              │   │
+│  │  ├─ KubeVirt (VMs)                                                  │   │
+│  │  └─ ArgoCD (GitOps, auto-deployed)                                  │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
 │                                                                             │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                           KUBERNETES CLUSTER                                │
-├─────────────────────────────────────────────────────────────────────────────┤
+│  Network:  Management (eno1) → TOR Switch (DHCP)                           │
+│            Cluster (bond0 LACP 20G) → Distribution Switch (VLAN 100)       │
 │                                                                             │
-│  CNI:           Cilium (eBPF, kube-proxy replacement)                      │
-│  Pod Network:   10.1.0.0/16                                                │
-│  Service CIDR:  10.2.0.0/16                                                │
-│  Storage:       Longhorn (3x replica)                                      │
-│  Networking:    Multus (multi-NIC)                                         │
-│  Compute:       KubeVirt (VMs)                                             │
-│  GitOps:        ArgoCD (auto-deployed)                                     │
+│  Storage:  Pod Network 10.1.0.0/16  |  Service CIDR 10.2.0.0/16            │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
