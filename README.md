@@ -26,7 +26,7 @@ GitOps-managed Kubernetes homelab cluster mit RKE2, Cilium CNI und ArgoCD.
 ---
 
 ## 📁 Repository Structure
-In logischer Reihenffolge, von Bare-Metall installation zu GitOps.
+In logischer Reihenfolge, von Bare-Metall installation zu GitOps.
 
 ```
 k8s-homelab-gitops/

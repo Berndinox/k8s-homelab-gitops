@@ -1,0 +1,19 @@
+# Secrets - NEVER commit these!
+secrets.env
+
+# Generated configs (contain embedded secrets)
+generated/
+
+# Archived old configs (may contain secrets)
+archive/
+
+# Ignition files (compiled from Butane, contain secrets)
+*.ign
+
+# Backup files
+*.bak
+*~
+
+# Fedora CoreOS downloads
+fedora-coreos-*.iso
+fedora-coreos-*.iso.sig

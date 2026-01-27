@@ -1,0 +1,38 @@
+# Kubernetes Homelab GitOps - Global Gitignore
+
+# Secrets (NEVER commit!)
+secrets.env
+*.key
+*.pem
+*.crt
+*-key.yaml
+
+# CoreOS Ignition files (contain embedded secrets)
+*.ign
+
+# CoreOS generated configs
+coreos/generated/
+
+# Fedora CoreOS downloads
+*.iso
+*.iso.sig
+
+# Backup files
+*.bak
+*~
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Terraform (if used)
+.terraform/
+*.tfstate
+*.tfstate.backup
+
+# Temporary files
+tmp/
+temp/
