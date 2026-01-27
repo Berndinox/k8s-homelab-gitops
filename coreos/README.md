@@ -36,7 +36,7 @@ secrets.env.example         # Template for secrets
 
 ## Quick Start
 
-> **Note for macOS users:** Use Ventoy - it works exactly like `coreos-installer` on Linux. One USB stick, ISO + Ignition config, done.
+> **Note for macOS users:** Use Ventoy (manual download from GitHub) - it works exactly like `coreos-installer` on Linux. One USB stick, ISO + Ignition config, done. One-time setup, then identical workflow to Linux.
 
 ### Prerequisites
 
@@ -47,8 +47,10 @@ secrets.env.example         # Template for secrets
 # Install Butane (for building Ignition configs)
 brew install butane
 
-# Install Ventoy (for bootable USB with Ignition support)
-brew install --cask ventoy
+# Install Ventoy manually (one-time setup)
+# Download from: https://github.com/ventoy/Ventoy/releases/latest
+# 1. Download: Ventoy-X.X.XX-mac.tar.gz
+# 2. Extract and run VentoyGUI or use CLI
 ```
 
 **Linux:**
@@ -118,10 +120,14 @@ sudo coreos-installer install /dev/sdX \
 **macOS (using Ventoy):**
 
 ```bash
-# 1. Install Ventoy to USB (one-time setup)
-# Open Ventoy app, select USB drive, click "Install"
-# Or via CLI:
-sudo /Applications/Ventoy.app/Contents/MacOS/Ventoy2Disk.sh -i /dev/diskN
+# 1. Download and install Ventoy (one-time setup)
+# Download from: https://github.com/ventoy/Ventoy/releases/latest
+# Extract: tar -xzvf ventoy-X.X.XX-mac.tar.gz
+cd ventoy-X.X.XX
+
+# Install Ventoy to USB
+diskutil list  # Find your USB device (e.g., /dev/disk4)
+sudo sh Ventoy2Disk.sh -i /dev/diskN  # Replace diskN with your USB
 
 # 2. Copy ISO to USB (simple drag & drop)
 cp fedora-coreos-stable.iso /Volumes/Ventoy/
