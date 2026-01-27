@@ -96,9 +96,8 @@ cat ~/.ssh/id_rsa.pub
 
 **Generate password hash:**
 ```bash
-# Install mkpasswd if needed
-# Ubuntu/Debian: sudo apt install whois
-# macOS: brew install mkpasswd
+# Install mkpasswd if needed via package manager
+# Example: brew install mkpasswd (macOS)
 
 # Generate hash (example password: "fedora")
 mkpasswd -m sha-512
