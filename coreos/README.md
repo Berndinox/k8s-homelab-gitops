@@ -39,20 +39,42 @@ secrets.env.example         # Template for secrets
 ### Prerequisites
 
 **Tools:**
-```bash
-# macOS
-brew install butane coreos-installer
 
-# Linux
+**macOS (ARM/Intel):**
+```bash
+# Install Butane (for building Ignition configs)
+brew install butane
+
+# For USB creation, install Balena Etcher (easiest option)
+brew install --cask balenaetcher
+```
+
+**Linux:**
+```bash
+# Install Butane
 curl -L https://github.com/coreos/butane/releases/latest/download/butane-x86_64-unknown-linux-gnu -o /usr/local/bin/butane
 chmod +x /usr/local/bin/butane
+
+# Install CoreOS Installer
 curl -L https://github.com/coreos/coreos-installer/releases/latest/download/coreos-installer-x86_64-unknown-linux-gnu -o /usr/local/bin/coreos-installer
 chmod +x /usr/local/bin/coreos-installer
 ```
 
 **Download Fedora CoreOS ISO:**
+
+**Linux:**
 ```bash
 coreos-installer download -s stable -p metal -f iso
+```
+
+**macOS (direct download):**
+```bash
+# Get latest stable ISO directly
+curl -L -o fedora-coreos-stable.iso \
+  'https://builds.coreos.fedoraproject.org/prod/streams/stable/builds/41.20250120.3.0/x86_64/fedora-coreos-41.20250120.3.0-live.x86_64.iso'
+
+# Or check for latest version at:
+# https://fedoraproject.org/coreos/download
 ```
 
 ### 1. Create Secrets
@@ -80,15 +102,41 @@ JOIN_TOKEN=''
 ```bash
 # Build Ignition file
 ./build-ignition.sh host03
+```
 
-# Create bootable USB
+**Create bootable USB:**
+
+**Linux:**
+```bash
 sudo coreos-installer install /dev/sdX \
   --image-file fedora-coreos-*.iso \
   --ignition-file ignition/host03.ign
-
-# Boot the server
-# Installation takes ~5 minutes
 ```
+
+**macOS:**
+```bash
+# Option A: Use Balena Etcher (GUI)
+# 1. Open Balena Etcher
+# 2. Select the ISO file
+# 3. Select target USB drive
+# 4. Flash
+
+# Option B: Use dd (Terminal)
+# Find USB device
+diskutil list
+# Unmount (replace diskN with your USB)
+diskutil unmountDisk /dev/diskN
+# Write ISO
+sudo dd if=fedora-coreos-stable.iso of=/dev/rdiskN bs=1m status=progress
+# Eject
+diskutil eject /dev/diskN
+
+# Note: Ignition file must be provided via kernel parameters or network
+# See: https://docs.fedoraproject.org/en-US/fedora-coreos/live-booting-ipxe/
+```
+
+**Boot the server:**
+- Installation takes ~5 minutes
 
 **What happens automatically:**
 1. OS installation
@@ -130,6 +178,7 @@ nano secrets.env
 
 ### 5. Install Remaining Nodes
 
+**Linux (coreos-installer):**
 ```bash
 # host01
 sudo coreos-installer install /dev/sdX \
@@ -140,6 +189,12 @@ sudo coreos-installer install /dev/sdX \
 sudo coreos-installer install /dev/sdX \
   --image-file fedora-coreos-*.iso \
   --ignition-file ignition/host02.ign
+```
+
+**macOS (dd or Balena Etcher):**
+```bash
+# Create bootable USB with ISO (see step 2)
+# Provide Ignition via kernel parameters at boot
 ```
 
 ### 6. Verify Cluster
@@ -300,9 +355,11 @@ kubectl get application infrastructure -n argocd -o yaml | grep -A 5 status
 # Remove from cluster (optional, will auto-remove on reinstall)
 kubectl delete node host01
 
-# Reinstall
+# Reinstall (Linux)
 sudo coreos-installer install /dev/sdX \
   --ignition-file ignition/host01.ign
+
+# Or create bootable USB on macOS (see step 2)
 
 # Node will auto-join and sync
 ```
@@ -315,14 +372,18 @@ If host03 fails and cluster is running on host01+host02:
 ```bash
 # Use host03-join config instead of bootstrap
 ./build-ignition.sh host03  # This builds host03-join.bu!
+
+# Linux
 sudo coreos-installer install /dev/sdX --ignition-file ignition/host03.ign
+
+# macOS: Create bootable USB (see step 2)
 ```
 
 **Option B - Fresh bootstrap (if entire cluster is lost):**
 ```bash
 # Wipe all nodes, start over with host03-bootstrap
 ./build-ignition.sh host03
-# Use fcos-host03-bootstrap.bu
+# Use fcos-host03-bootstrap.bu and create bootable USB
 ```
 
 ### Update Node Configuration
