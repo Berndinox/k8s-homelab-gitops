@@ -284,3 +284,117 @@ curl -sSL https://raw.githubusercontent.com/Berndinox/k8s-homelab-gitops/main/sc
 ```
 
 Then start from **Step 3** (Install RKE or 04 "Join Cluster") again.
+
+
+
+## 🚀 Installation
+
+### Prerequisites
+
+**Auf ALLEN Nodes ausführen:**
+
+```bash
+# 2. OS Preparation (WICHTIG - lädt Kernel Module!)
+./scripts/01-os-prep.sh
+```
+
+Das `01-os-prep.sh` Script:
+- Lädt Kernel Module (vxlan, geneve, ip_tunnel)
+- Konfiguriert System Settings
+- Macht Module persistent
+
+### Step 1: Bootstrap First Node (host03)
+
+```bash
+# Auf host01:
+cd scripts/
+chmod +x *.sh
+
+# OS Prep (falls nicht schon gemacht)
+./01-os-prep.sh
+
+# RKE2 + Cilium installieren
+./02-install-rke2-cilium.sh
+
+# Warten (~5 Minuten)
+# Script installiert:
+# - RKE2 
+# - Cilium CNI (via HelmChartConfig)
+# - kubectl setup
+
+# Join Token speichern:
+cat /var/lib/rancher/rke2/server/node-token
+```
+
+**Verification:**
+```bash
+kubectl get nodes
+# NAME     STATUS   ROLES                 AGE   VERSION
+# host01   Ready    control-plane,etcd    5m    v1.34.3+rke2r1
+
+kubectl get pods -n kube-system -l k8s-app=cilium
+# NAME           READY   STATUS    RESTARTS   AGE
+# cilium-xxxxx   1/1     Running   0          3m
+```
+
+### Step 2: Join Additional Nodes (host02, host03)
+
+```bash
+# Auf host02 und host03:
+
+# 1. OS Prep (falls nicht schon gemacht)
+./scripts/01-os-prep.sh
+
+# 2. Join Script vorbereiten
+nano scripts/04-join-control-plane.sh
+
+# Anpassen:
+NODE_IP="10.0.100.102"              # host01: .101, host02: .102
+NODE_NAME="host02"                  # hostname
+JOIN_TOKEN=""     # Token von host01!
+
+# 3. Ausführen:
+./scripts/04-join-control-plane.sh
+```
+
+**Nach allen 3 Nodes:**
+```bash
+kubectl get nodes
+# NAME     STATUS   ROLES                 AGE   VERSION
+# host01   Ready    control-plane,etcd    5m   v1.34.3+rke2r1
+# host02   Ready    control-plane,etcd    15m    v1.34.3+rke2r1
+# host03   Ready    control-plane,etcd    25m   v1.34.3+rke2r1
+
+kubectl get pods -n kube-system -l k8s-app=cilium
+# Sollte 3 Pods zeigen (einer pro Node)
+```
+
+### Step 3: Deploy ArgoCD
+
+```bash
+./scripts/03-install-argocd.sh
+
+# Warten bis alle Pods ready:
+kubectl get pods -n argocd -w
+```
+
+**ArgoCD UI Access:**
+```bash
+# Port-forward:
+kubectl port-forward svc/argocd-server -n argocd 8080:443 --address=0.0.0.0
+
+# URL: https://10.0.200.103:8080
+# User: admin
+# Password:
+kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
+```
+
+### Step 4: Bootstrap GitOps
+
+```bash
+# ArgoCD Root App deployen
+kubectl apply -f bootstrap/root-app.yaml
+
+# Deployment watchen
+kubectl get applications -n argocd -w
+```
