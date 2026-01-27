@@ -13,62 +13,6 @@ Wave 2: 02-multus/         → Multi-NIC networking
 Wave 3: 03-kubevirt/       → VM virtualization
 ```
 
-## Adding Components
-
-### Example: Add Longhorn via Helm
-
-Create `01-longhorn/longhorn.yaml`:
-
-```yaml
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: longhorn
-  namespace: argocd
-  annotations:
-    argocd.argoproj.io/sync-wave: "1"
-spec:
-  project: default
-  source:
-    repoURL: https://charts.longhorn.io
-    chart: longhorn
-    targetRevision: 1.6.0
-    helm:
-      values: |
-        defaultSettings:
-          defaultReplicaCount: 3
-  destination:
-    server: https://kubernetes.default.svc
-    namespace: longhorn-system
-  syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
-    syncOptions:
-      - CreateNamespace=true
-```
-
-### Using Manifests Instead
-
-```bash
-# Add Kubernetes manifests directly
-cd 01-longhorn/
-kubectl create -f longhorn-install.yaml --dry-run=client -o yaml > manifest.yaml
-
-# Commit and push
-git add .
-git commit -m "Add Longhorn manifests"
-git push
-```
-
-ArgoCD will sync automatically and deploy in wave order.
-
-## Sync Wave Guidelines
-
-- **Wave 0:** Namespaces, CRDs, basic resources
-- **Wave 1:** Storage (needed by other components)
-- **Wave 2:** Networking (needs storage for configs)
-- **Wave 3:** Advanced features (needs storage + networking)
 
 ## Verification
 

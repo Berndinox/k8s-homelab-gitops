@@ -12,40 +12,47 @@
 ## Network Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                      BARE METAL INFRASTRUCTURE                       │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                       │
-│  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐  │
-│  │     host01       │  │     host02       │  │     host03       │  │
-│  │  10.0.100.101    │  │  10.0.100.102    │  │  10.0.100.103    │  │
-│  │                  │  │                  │  │  (Bootstrap)     │  │
-│  │  Control Plane   │  │  Control Plane   │  │  Control Plane   │  │
-│  │  + etcd          │  │  + etcd          │  │  + etcd          │  │
-│  └────────┬─────────┘  └────────┬─────────┘  └────────┬─────────┘  │
-│           │                     │                      │            │
-│           └─────────────────────┴──────────────────────┘            │
-│                              bond0                                  │
-│                         LACP 802.3ad (20G)                          │
-│                        ┌─────┴─────┐                                │
-│                   enp1s0         enp1s0d1                           │
-│                   (10G)            (10G)                            │
-│                                                                     │
-│  Management: eno1 (DHCP)                                           │
-│  Cluster:    VLAN 100 (10.0.100.0/24)                              │
-├─────────────────────────────────────────────────────────────────────┤
-│                      KUBERNETES CLUSTER                              │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                       │
-│  CNI:           Cilium (eBPF, kube-proxy replacement)                │
-│  Pod Network:   10.1.0.0/16                                          │
-│  Service CIDR:  10.2.0.0/16                                          │
-│  Storage:       Longhorn (3x replica)                                │
-│  Networking:    Multus (multi-NIC)                                   │
-│  Compute:       KubeVirt (VMs)                                       │
-│  GitOps:        ArgoCD (auto-deployed)                               │
-│                                                                       │
-└───────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         BARE METAL INFRASTRUCTURE                           │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│   ┌──────────────────┐    ┌──────────────────┐    ┌──────────────────┐    │
+│   │     host01       │    │     host02       │    │     host03       │    │
+│   │  10.0.100.101    │    │  10.0.100.102    │    │  10.0.100.103    │    │
+│   │                  │    │                  │    │  (Bootstrap)     │    │
+│   │  Control Plane   │    │  Control Plane   │    │  Control Plane   │    │
+│   │  + etcd          │    │  + etcd          │    │  + etcd          │    │
+│   └────┬────────┬────┘    └────┬────────┬────┘    └────┬────────┬────┘    │
+│        │        │              │        │              │        │         │
+│     eno1     bond0          eno1     bond0          eno1     bond0        │
+│      │    ┌───┴───┐          │    ┌───┴───┐          │    ┌───┴───┐      │
+│      │  enp1s0 enp1s0d1      │  enp1s0 enp1s0d1      │  enp1s0 enp1s0d1  │
+│      │    │       │           │    │       │           │    │       │      │
+│      │    └───┬───┘           │    └───┬───┘           │    └───┬───┘      │
+│      │      (LACP)            │      (LACP)            │      (LACP)       │
+│      │      20Gbit            │      20Gbit            │      20Gbit       │
+│      │        │               │        │               │        │          │
+│  ┌───┴────────┴───────────────┴────────┴───────────────┴────────┴───────┐ │
+│  │                        Management Switch (DHCP)                       │ │
+│  │                         + Access Switch (VLAN 100)                    │ │
+│  └───────────────────────────────────────────────────────────────────────┘ │
+│                                                                             │
+│  Management Network:  eno1 → DHCP                                          │
+│  Cluster Network:     bond0 (VLAN 100) → 10.0.100.0/24                     │
+│                                                                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                           KUBERNETES CLUSTER                                │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  CNI:           Cilium (eBPF, kube-proxy replacement)                      │
+│  Pod Network:   10.1.0.0/16                                                │
+│  Service CIDR:  10.2.0.0/16                                                │
+│  Storage:       Longhorn (3x replica)                                      │
+│  Networking:    Multus (multi-NIC)                                         │
+│  Compute:       KubeVirt (VMs)                                             │
+│  GitOps:        ArgoCD (auto-deployed)                                     │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -151,50 +158,50 @@ k8s-homelab-gitops/
 ## Deployment Flow
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│ PHASE 1: USB Boot & OS Installation (~5 min)                        │
-└──────────────────────┬──────────────────────────────────────────────┘
-                       │
-                       ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│ PHASE 2: Kubernetes Bootstrap (host03)                              │
-├─────────────────────────────────────────────────────────────────────┤
-│  1. Network Configuration (bond0 + VLAN 100)                        │
-│  2. RKE2 Installation                                               │
-│  3. Cilium CNI Deployment                        ~10 min            │
-│  4. ArgoCD Installation                                             │
-│  5. GitOps Bootstrap (root-app.yaml)                                │
-└──────────────────────┬──────────────────────────────────────────────┘
-                       │
-                       ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│ PHASE 3: Infrastructure Deployment (GitOps Sync Wave 0)             │
-├─────────────────────────────────────────────────────────────────────┤
-│  Wave 0: Namespaces                                                 │
-│  Wave 1: Longhorn (Storage)                                         │
-│  Wave 2: Multus (Multi-NIC)                     ~10-15 min          │
-│  Wave 3: KubeVirt (VMs)                                             │
-│                                                                      │
-│  ⏳ Bootstrap script waits for infrastructure health                │
-└──────────────────────┬──────────────────────────────────────────────┘
-                       │
-                       ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│ PHASE 4: Application Deployment (GitOps Sync Wave 10)               │
-├─────────────────────────────────────────────────────────────────────┤
-│  Automatic deployment of apps/                  ~Variable           │
-│  Only starts after infrastructure is healthy                        │
-└──────────────────────┬──────────────────────────────────────────────┘
-                       │
-                       ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│ PHASE 5: Join Additional Nodes (host01, host02)                     │
-├─────────────────────────────────────────────────────────────────────┤
-│  1. Add JOIN_TOKEN to secrets.env                                   │
-│  2. Build join configs                           ~5 min per node    │
-│  3. Install from USB                                                │
-│  4. Auto-join cluster                                               │
-└─────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ PHASE 1: USB Boot & OS Installation (~5 min)                               │
+└────────────────────────────────┬────────────────────────────────────────────┘
+                                 │
+                                 ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ PHASE 2: Kubernetes Bootstrap (host03)                                     │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  1. Network Configuration (bond0 + VLAN 100)                               │
+│  2. RKE2 Installation                                                      │
+│  3. Cilium CNI Deployment                                ~10 min           │
+│  4. ArgoCD Installation                                                    │
+│  5. GitOps Bootstrap (root-app.yaml)                                       │
+└────────────────────────────────┬────────────────────────────────────────────┘
+                                 │
+                                 ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ PHASE 3: Infrastructure Deployment (GitOps Sync Wave 0)                    │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  Wave 0: Namespaces                                                        │
+│  Wave 1: Longhorn (Storage)                                                │
+│  Wave 2: Multus (Multi-NIC)                              ~10-15 min        │
+│  Wave 3: KubeVirt (VMs)                                                    │
+│                                                                             │
+│  ⏳ Bootstrap script waits for infrastructure health                       │
+└────────────────────────────────┬────────────────────────────────────────────┘
+                                 │
+                                 ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ PHASE 4: Application Deployment (GitOps Sync Wave 10)                      │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  Automatic deployment of apps/                          ~Variable          │
+│  Only starts after infrastructure is healthy                               │
+└────────────────────────────────┬────────────────────────────────────────────┘
+                                 │
+                                 ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ PHASE 5: Join Additional Nodes (host01, host02)                            │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  1. Add JOIN_TOKEN to secrets.env                                          │
+│  2. Build join configs                                   ~5 min per node   │
+│  3. Install from USB                                                       │
+│  4. Auto-join cluster                                                      │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 **Total Time:** ~30-40 minutes from bare metal to fully operational cluster
@@ -214,57 +221,6 @@ k8s-homelab-gitops/
 | **Compute** | KubeVirt | VM orchestration |
 | **Observability** | Hubble | Network visibility |
 
----
-
-## Adding Components
-
-### Infrastructure Component
-
-```bash
-cd infrastructure/01-longhorn/
-
-# Add Helm Application
-cat > longhorn-app.yaml <<EOF
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: longhorn
-  namespace: argocd
-  annotations:
-    argocd.argoproj.io/sync-wave: "1"
-spec:
-  project: default
-  source:
-    repoURL: https://charts.longhorn.io
-    chart: longhorn
-    targetRevision: 1.6.0
-  destination:
-    server: https://kubernetes.default.svc
-    namespace: longhorn-system
-  syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
-    syncOptions:
-      - CreateNamespace=true
-EOF
-
-git add . && git commit -m "Add Longhorn" && git push
-# ArgoCD syncs automatically, deploys in wave 1
-```
-
-### Application
-
-```bash
-cd apps/
-mkdir my-app
-
-# Add manifests
-kubectl create deployment my-app --image=nginx --dry-run=client -o yaml > my-app/deployment.yaml
-
-git add . && git commit -m "Add my-app" && git push
-# ArgoCD syncs automatically, deploys after infrastructure (wave 10)
-```
 
 ---
 
