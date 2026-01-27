@@ -1,24 +1,24 @@
 # k8s-homelab-gitops
 
-GitOps-managed Kubernetes homelab cluster mit RKE2, Cilium CNI und ArgoCD.
+GitOps-managed Kubernetes homelab cluster with RKE2, Cilium CNI, and ArgoCD.
 
-**Disclaimer**: Dieses Projekt wird „as is“ bereitgestellt. Es handelt sich um ein privates Hobbyprojekt ohne Garantie auf Funktion oder Sicherheit. Der Autor übernimmt keine Haftung für Schäden, die durch die Nutzung entstehen.
+**Disclaimer**: This project is provided "as is". It is a private hobby project without any guarantee of functionality or security. The author assumes no liability for damages arising from use.
 
 ## 🎯 Cluster Overview
 
 **Infrastructure:**
-- 3x Control-Plane Nodes (CoreOS)
+- 3x Control-Plane Nodes (Fedora CoreOS)
 - RKE2 Kubernetes Distribution
 - High Availability etcd
-- Cilium CNI mit BGP Control Plane
-- KubeVirt und Multus für erweitertes Networking
+- Cilium CNI with BGP Control Plane
+- KubeVirt and Multus for enhanced networking
 - GitOps via ArgoCD
 
 **Network Architecture:**
 ```
-3x Ubuntu 24.04 Hosts (host01, host02, host03)
-├── Management: VLAN 200 (10.0.200.0/24)
-├── Workload: VLAN 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100 (10.0.100.0/24) - bond0 (LACP Trunk Port 20Gbit)
+3x Fedora CoreOS Hosts (host01, host02, host03)
+├── Management: DHCP via eno1
+├── Cluster: VLAN 100 (10.0.100.0/24) - bond0 (LACP 20Gbit)
 ├── Pod Network: 10.1.0.0/16 (Cilium VXLAN)
 └── Service Network: 10.2.0.0/16
 ```
@@ -26,15 +26,16 @@ GitOps-managed Kubernetes homelab cluster mit RKE2, Cilium CNI und ArgoCD.
 ---
 
 ## 📁 Repository Structure
-In logischer Reihenfolge, von Bare-Metall installation zu GitOps.
+
+Logical order from bare-metal installation to GitOps:
 
 ```
 k8s-homelab-gitops/
-├── coreos/
-├── argocd-apps/
-├── bootstrap/
-├── infrastructure/
-└── apps/
+├── coreos/              # Fedora CoreOS installation configs
+├── argocd-apps/         # ArgoCD application definitions
+├── bootstrap/           # GitOps bootstrap manifests
+├── infrastructure/      # Core infrastructure components
+└── apps/                # Application deployments
 ```
 
 ---
@@ -58,12 +59,12 @@ k8s-homelab-gitops/
 | Multus | ⏳ Planned |
 | KubeVirt | ⏳ Planned |
 | BGP Config | ⏳ Planned |
----
 
+---
 
 ## 🔧 Cilium Configuration
 
-**Aktuelle Config** (`/var/lib/rancher/rke2/server/manifests/rke2-cilium-config.yaml`):
+**Current Config** (`/var/lib/rancher/rke2/server/manifests/rke2-cilium-config.yaml`):
 
 ```yaml
 # CNI: Cilium via RKE2
@@ -74,30 +75,27 @@ k8s-homelab-gitops/
 - BGP Control Plane (enabled, not configured yet)
 - LoadBalancer (hybrid mode)
 ```
+
 ### 📝 Notes
 
 **Kernel Modules:**
 - `vxlan`, `geneve`, `ip_tunnel` are REQUIRED
 - Must be loaded before RKE2 starts
 - Missing modules = BPF compilation errors
+
 ---
 
 ## 🎯 Roadmap
 
 - [x] RKE2 3-Node HA Cluster
-- [x] Cilium CNI mit BPG
+- [x] Cilium CNI with BGP
 - [x] Hubble Observability
 - [x] ArgoCD Installation
 - [ ] Longhorn Storage
 - [ ] Multus Multi-NIC
 - [ ] KubeVirt VM Support
-- [ ] KubeVirt OPNSense VM
-- [ ] BGP Peering mit OPNsense
+- [ ] KubeVirt OPNsense VM
+- [ ] BGP Peering with OPNsense
 - [ ] Application Deployments
-
----
-
-
-
 
 ---
