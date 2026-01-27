@@ -1,0 +1,3 @@
+# Applications Directory
+# Deployed via ArgoCD after infrastructure is healthy
+# Add your application manifests here

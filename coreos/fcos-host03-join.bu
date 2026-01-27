@@ -1,8 +1,9 @@
 variant: fcos
 version: 1.5.0
 
-# Fedora CoreOS Template for RKE2 Kubernetes Cluster
-# Variables to replace: {{HOSTNAME}}, {{NODE_IP}}, {{IS_BOOTSTRAP}}, {{JOIN_TOKEN}}
+# Fedora CoreOS Configuration for host03 (Join Node - Rebuild Scenario)
+# Node IP: 10.0.100.103 (VLAN 100)
+# Use this config when host03 needs to rejoin an existing cluster running on host01+host02
 
 passwd:
   users:
@@ -21,7 +22,7 @@ storage:
     - path: /etc/hostname
       mode: 0644
       contents:
-        inline: {{HOSTNAME}}
+        inline: host03
 
     # Kernel modules
     - path: /etc/modules-load.d/kubernetes.conf
@@ -64,6 +65,8 @@ storage:
           fs.inotify.max_user_instances = 8192
           fs.inotify.max_user_watches = 524288
           fs.file-max = 2097152
+
+          # Memory mapping (for Elasticsearch, Longhorn, mmap-intensive workloads)
           vm.max_map_count = 262144
 
     # Disable auto-updates
@@ -107,12 +110,12 @@ storage:
         inline: |
           [connection]
           id=enp1s0
+          autoconnect-priority=5
           type=ethernet
           interface-name=enp1s0
           master=bond0
           slave-type=bond
           autoconnect=yes
-          autoconnect-priority=5
 
     # NetworkManager: Physical Interface 2
     - path: /etc/NetworkManager/system-connections/enp1s0d1.nmconnection
@@ -121,12 +124,12 @@ storage:
         inline: |
           [connection]
           id=enp1s0d1
+          autoconnect-priority=5
           type=ethernet
           interface-name=enp1s0d1
           master=bond0
           slave-type=bond
           autoconnect=yes
-          autoconnect-priority=5
 
     # NetworkManager: VLAN 100 (Cluster Network)
     - path: /etc/NetworkManager/system-connections/vlan100.nmconnection
@@ -135,10 +138,10 @@ storage:
         inline: |
           [connection]
           id=vlan100
+          autoconnect-priority=1
           type=vlan
           interface-name=vlan100
           autoconnect=yes
-          autoconnect-priority=1
 
           [vlan]
           id=100
@@ -146,7 +149,7 @@ storage:
 
           [ipv4]
           method=manual
-          address1={{NODE_IP}}/24
+          address1=10.0.100.103/24
 
           [ipv6]
           method=disabled
@@ -168,12 +171,51 @@ storage:
           [ipv6]
           method=disabled
 
-    # RKE2 Configuration
+    # RKE2 Configuration (Join Node)
     - path: /etc/rancher/rke2/config.yaml
       mode: 0644
       contents:
         inline: |
-          {{RKE2_CONFIG}}
+          # Join existing cluster
+          server: https://10.0.100.103:9345
+          token: {{JOIN_TOKEN}}
+
+          # Node Configuration
+          node-ip: 10.0.100.103
+          advertise-address: 10.0.100.103
+          node-name: host03
+
+          # Network Configuration
+          cluster-cidr: 10.1.0.0/16
+          service-cidr: 10.2.0.0/16
+          cluster-dns: 10.2.0.10
+
+          # CNI - Use RKE2's bundled Cilium
+          cni: cilium
+
+          # Disable unnecessary components
+          disable:
+            - rke2-ingress-nginx
+            - rke2-canal
+
+          # Disable kube-proxy (Cilium will replace it)
+          disable-kube-proxy: true
+          write-kubeconfig-mode: "0644"
+
+          # TLS SANs for all nodes
+          tls-san:
+            - host01
+            - host02
+            - host03
+            - 10.0.200.101
+            - 10.0.200.102
+            - 10.0.200.103
+            - 10.0.100.101
+            - 10.0.100.102
+            - 10.0.100.103
+
+          # Metrics
+          etcd-expose-metrics: true
 
     # Cilium HelmChartConfig
     - path: /var/lib/rancher/rke2/server/manifests/rke2-cilium-config.yaml
@@ -240,7 +282,25 @@ storage:
       mode: 0755
       contents:
         inline: |
-          {{POST_INSTALL_SCRIPT}}
+          #!/bin/bash
+          set -e
+
+          echo "Waiting for RKE2 to join cluster..."
+          for i in {1..30}; do
+            if /usr/local/bin/kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml get nodes &>/dev/null; then
+              echo "API is ready!"
+              break
+            fi
+            echo "Waiting... ($i/30)"
+            sleep 10
+          done
+
+          # Setup kubeconfig for core user
+          cp /etc/rancher/rke2/rke2.yaml /home/core/.kube/config
+          chown -R core:core /home/core/.kube
+          chmod 600 /home/core/.kube/config
+
+          echo "✅ host03 joined cluster!"
 
 systemd:
   units:

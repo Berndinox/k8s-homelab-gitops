@@ -1,0 +1,3 @@
+# Multus CNI
+# Will be deployed via ArgoCD with sync wave 2
+# Depends on: Longhorn (for persistent storage if needed)

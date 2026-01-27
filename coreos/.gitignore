@@ -3,6 +3,7 @@ secrets.env
 
 # Generated configs (contain embedded secrets)
 generated/
+ignition/
 
 # Archived old configs (may contain secrets)
 archive/
