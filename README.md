@@ -16,22 +16,22 @@
 │                              3-NODE HA CLUSTER                              │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
-│    host01              host02              host03 (Bootstrap)              │
+│    host01              host02              host03 (Bootstrap)               │
 │  10.0.100.101        10.0.100.102        10.0.100.103                       │
 │                                                                             │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │  RKE2 Kubernetes (3x Control Plane + etcd)                          │   │
-│  │  ├─ Cilium CNI (eBPF, BGP, Hubble)                                  │   │
-│  │  ├─ Longhorn Storage (3x replica)                                   │   │
-│  │  ├─ Multus (multi-NIC)                                              │   │
-│  │  ├─ KubeVirt (VMs)                                                  │   │
-│  │  └─ ArgoCD (GitOps, auto-deployed)                                  │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │  RKE2 Kubernetes (3x Control Plane + etcd)                          │    │
+│  │  ├─ Cilium CNI (eBPF, BGP, Hubble)                                  │    │
+│  │  ├─ Longhorn Storage (3x replica)                                   │    │
+│  │  ├─ Multus (multi-NIC)                                              │    │
+│  │  ├─ KubeVirt (VMs)                                                  │    │
+│  │  └─ ArgoCD (GitOps, auto-deployed)                                  │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
 │                                                                             │
-│  Network:  Management (eno1) → TOR Switch (DHCP)                           │
-│            Cluster (bond0 LACP 20G) → Distribution Switch (VLAN 100)       │
+│  Network:  Management (eno1) → TOR Switch (DHCP)                            │
+│            Cluster (bond0 LACP 20G) → Distribution Switch (VLAN 100)        │
 │                                                                             │
-│  Storage:  Pod Network 10.1.0.0/16  |  Service CIDR 10.2.0.0/16            │
+│  Storage:  Pod Network 10.1.0.0/16  |  Service CIDR 10.2.0.0/16             │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -140,48 +140,48 @@ k8s-homelab-gitops/
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ PHASE 1: USB Boot & OS Installation (~5 min)                               │
+│ PHASE 1: USB Boot & OS Installation (~5 min)                                │
 └────────────────────────────────┬────────────────────────────────────────────┘
                                  │
                                  ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ PHASE 2: Kubernetes Bootstrap (host03)                                     │
+│ PHASE 2: Kubernetes Bootstrap (host03)                                      │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│  1. Network Configuration (bond0 + VLAN 100)                               │
-│  2. RKE2 Installation                                                      │
-│  3. Cilium CNI Deployment                                ~10 min           │
-│  4. ArgoCD Installation                                                    │
-│  5. GitOps Bootstrap (root-app.yaml)                                       │
+│  1. Network Configuration (bond0 + VLAN 100)                                │
+│  2. RKE2 Installation                                                       │
+│  3. Cilium CNI Deployment                                ~10 min            │
+│  4. ArgoCD Installation                                                     │
+│  5. GitOps Bootstrap (root-app.yaml)                                        │
 └────────────────────────────────┬────────────────────────────────────────────┘
                                  │
                                  ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ PHASE 3: Infrastructure Deployment (GitOps Sync Wave 0)                    │
+│ PHASE 3: Infrastructure Deployment (GitOps Sync Wave 0)                     │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│  Wave 0: Namespaces                                                        │
-│  Wave 1: Longhorn (Storage)                                                │
-│  Wave 2: Multus (Multi-NIC)                              ~10-15 min        │
-│  Wave 3: KubeVirt (VMs)                                                    │
+│  Wave 0: Namespaces                                                         │
+│  Wave 1: Longhorn (Storage)                                                 │
+│  Wave 2: Multus (Multi-NIC)                              ~10-15 min         │
+│  Wave 3: KubeVirt (VMs)                                                     │
 │                                                                             │
-│  ⏳ Bootstrap script waits for infrastructure health                       │
+│  Bootstrap script waits for infrastructure health                           │
 └────────────────────────────────┬────────────────────────────────────────────┘
                                  │
                                  ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ PHASE 4: Application Deployment (GitOps Sync Wave 10)                      │
+│ PHASE 4: Application Deployment (GitOps Sync Wave 10)                       │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│  Automatic deployment of apps/                          ~Variable          │
-│  Only starts after infrastructure is healthy                               │
+│  Automatic deployment of apps/                          ~Variable           │
+│  Only starts after infrastructure is healthy                                │
 └────────────────────────────────┬────────────────────────────────────────────┘
                                  │
                                  ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ PHASE 5: Join Additional Nodes (host01, host02)                            │
+│ PHASE 5: Join Additional Nodes (host01, host02)                             │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│  1. Add JOIN_TOKEN to secrets.env                                          │
-│  2. Build join configs                                   ~5 min per node   │
-│  3. Install from USB                                                       │
-│  4. Auto-join cluster                                                      │
+│  1. Add JOIN_TOKEN to secrets.env                                           │
+│  2. Build join configs                                   ~5 min per node    │
+│  3. Install from USB                                                        │
+│  4. Auto-join cluster                                                       │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
