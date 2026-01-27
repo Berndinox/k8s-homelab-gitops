@@ -36,26 +36,14 @@ secrets.env.example         # Template for secrets
 
 ## Quick Start
 
-> **Note for macOS users:** Use Ventoy (manual download from GitHub) - it works exactly like `coreos-installer` on Linux. One USB stick, ISO + Ignition config, done. One-time setup, then identical workflow to Linux.
-
 ### Prerequisites
 
-**Tools:**
+**Linux System Required:**
+These instructions assume you're using a Linux system (VM or native) to prepare the USB drives.
 
-**macOS (ARM/Intel):**
+**Tools:**
 ```bash
 # Install Butane (for building Ignition configs)
-brew install butane
-
-# Install Ventoy manually (one-time setup)
-# Download from: https://github.com/ventoy/Ventoy/releases/latest
-# 1. Download: Ventoy-X.X.XX-mac.tar.gz
-# 2. Extract and run VentoyGUI or use CLI
-```
-
-**Linux:**
-```bash
-# Install Butane
 curl -L https://github.com/coreos/butane/releases/latest/download/butane-x86_64-unknown-linux-gnu -o /usr/local/bin/butane
 chmod +x /usr/local/bin/butane
 
@@ -65,20 +53,8 @@ chmod +x /usr/local/bin/coreos-installer
 ```
 
 **Download Fedora CoreOS ISO:**
-
-**Linux:**
 ```bash
 coreos-installer download -s stable -p metal -f iso
-```
-
-**macOS (direct download):**
-```bash
-# Get latest stable ISO directly
-curl -L -o fedora-coreos-stable.iso \
-  'https://builds.coreos.fedoraproject.org/prod/streams/stable/builds/43.20260105.3.0/x86_64/fedora-coreos-43.20260105.3.0-live-iso.x86_64.iso'
-
-# Or check for latest version at:
-# https://fedoraproject.org/coreos/download
 ```
 
 ### 1. Create Secrets
@@ -110,62 +86,23 @@ JOIN_TOKEN=''
 
 **Create bootable USB:**
 
-**Linux:**
 ```bash
+# Find your USB device
+lsblk
+
+# Install CoreOS with Ignition config embedded
 sudo coreos-installer install /dev/sdX \
   --image-file fedora-coreos-*.iso \
   --ignition-file ignition/host03.ign
-```
 
-**macOS (using Ventoy):**
-
-```bash
-# 1. Download and install Ventoy (one-time setup)
-# Download from: https://github.com/ventoy/Ventoy/releases/latest
-# Extract: tar -xzvf ventoy-X.X.XX-mac.tar.gz
-cd ventoy-X.X.XX
-
-# Install Ventoy to USB
-diskutil list  # Find your USB device (e.g., /dev/disk4)
-sudo sh Ventoy2Disk.sh -i /dev/diskN  # Replace diskN with your USB
-
-# 2. Copy ISO to USB (simple drag & drop)
-cp fedora-coreos-stable.iso /Volumes/Ventoy/
-
-# 3. Create Ventoy Ignition config directory
-mkdir -p /Volumes/Ventoy/ventoy/
-
-# 4. Copy Ignition config with Ventoy naming convention
-cp ignition/host03.ign /Volumes/Ventoy/ventoy/fedora-coreos-stable.ign
-
-# That's it! Boot from USB:
-# - Ventoy shows boot menu
-# - Select CoreOS ISO
-# - Ignition config is automatically applied
-# - Installation proceeds with your config
-```
-
-**Ventoy Ignition naming:**
-- ISO name: `fedora-coreos-stable.iso`
-- Ignition: `fedora-coreos-stable.ign` (same name, different extension)
-- Ventoy automatically injects the Ignition config at boot
-
-**Pro tip:** You can have multiple ISOs with different Ignition configs:
-```bash
-# Different configs per host
-cp fedora-coreos-stable.iso /Volumes/Ventoy/coreos-host01.iso
-cp fedora-coreos-stable.iso /Volumes/Ventoy/coreos-host02.iso
-cp fedora-coreos-stable.iso /Volumes/Ventoy/coreos-host03.iso
-
-cp ignition/host01.ign /Volumes/Ventoy/ventoy/coreos-host01.ign
-cp ignition/host02.ign /Volumes/Ventoy/ventoy/coreos-host02.ign
-cp ignition/host03.ign /Volumes/Ventoy/ventoy/coreos-host03.ign
-
-# Select the right ISO from Ventoy boot menu
+# The USB is now bootable and ready
 ```
 
 **Boot the server:**
+- Insert USB into target server
+- Boot from USB
 - Installation takes ~5 minutes
+- Ignition config is automatically applied
 
 **What happens automatically:**
 1. OS installation
@@ -207,7 +144,6 @@ nano secrets.env
 
 ### 5. Install Remaining Nodes
 
-**Linux (coreos-installer):**
 ```bash
 # host01
 sudo coreos-installer install /dev/sdX \
@@ -218,18 +154,8 @@ sudo coreos-installer install /dev/sdX \
 sudo coreos-installer install /dev/sdX \
   --image-file fedora-coreos-*.iso \
   --ignition-file ignition/host02.ign
-```
 
-**macOS (Ventoy):**
-```bash
-# Copy ISO and Ignition files to Ventoy USB
-cp fedora-coreos-stable.iso /Volumes/Ventoy/
-cp ignition/host01.ign /Volumes/Ventoy/ventoy/fedora-coreos-stable.ign
-
-# For host02, just replace the .ign file:
-cp ignition/host02.ign /Volumes/Ventoy/ventoy/fedora-coreos-stable.ign
-
-# Boot from USB, Ventoy auto-applies the Ignition config
+# Boot each server from their respective USB drives
 ```
 
 ### 6. Verify Cluster
@@ -390,12 +316,10 @@ kubectl get application infrastructure -n argocd -o yaml | grep -A 5 status
 # Remove from cluster (optional, will auto-remove on reinstall)
 kubectl delete node host01
 
-# Reinstall (Linux)
+# Reinstall
 sudo coreos-installer install /dev/sdX \
+  --image-file fedora-coreos-*.iso \
   --ignition-file ignition/host01.ign
-
-# macOS: Update Ignition on Ventoy USB, boot and reinstall
-cp ignition/host01.ign /Volumes/Ventoy/ventoy/fedora-coreos-stable.ign
 
 # Node will auto-join and sync
 ```
@@ -409,11 +333,10 @@ If host03 fails and cluster is running on host01+host02:
 # Use host03-join config instead of bootstrap
 ./build-ignition.sh host03  # This builds host03-join.bu!
 
-# Linux
-sudo coreos-installer install /dev/sdX --ignition-file ignition/host03.ign
-
-# macOS: Update Ignition on Ventoy USB
-cp ignition/host03.ign /Volumes/Ventoy/ventoy/fedora-coreos-stable.ign
+# Reinstall
+sudo coreos-installer install /dev/sdX \
+  --image-file fedora-coreos-*.iso \
+  --ignition-file ignition/host03.ign
 ```
 
 **Option B - Fresh bootstrap (if entire cluster is lost):**
