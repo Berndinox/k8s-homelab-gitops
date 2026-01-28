@@ -2,6 +2,11 @@
 
 > GitOps-managed bare-metal Kubernetes homelab with Talos Linux, Cilium CNI, and automated ArgoCD deployment
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Kubernetes](https://img.shields.io/badge/Kubernetes-Talos-326CE5?logo=kubernetes)](https://talos.dev/)
+[![ArgoCD](https://img.shields.io/badge/GitOps-ArgoCD-EF7B4D?logo=argo)](https://argoproj.github.io/cd/)
+[![Cilium](https://img.shields.io/badge/CNI-Cilium-F8C517?logo=cilium)](https://cilium.io/)
+
 ## Why this stack
 - Talos: immutable, API-only, minimal attack surface
 - Cilium: eBPF performance, Gateway API, kube-proxy replacement
