@@ -7,10 +7,10 @@ This directory contains core infrastructure components deployed in sequence usin
 Components are deployed in numbered order. Each must be healthy before the next begins.
 
 ```
-Wave 0: 00-namespaces/     → Kubernetes namespaces
-Wave 1: 01-longhorn/       → Persistent storage
-Wave 2: 02-multus/         → Multi-NIC networking
-Wave 3: 03-kubevirt/       → VM virtualization
+Wave -5: 00-cilium/        → CNI (Network) - MUST be first!
+Wave  1: 01-longhorn/      → Persistent storage
+Wave  2: 02-multus/        → Multi-NIC networking
+Wave  3: 03-kubevirt/      → VM virtualization
 ```
 
 

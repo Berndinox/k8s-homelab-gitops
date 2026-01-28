@@ -1,0 +1,247 @@
+# Talos Base Configuration Patch
+# Common settings applied to all nodes
+# This file contains template variables that will be replaced by build script
+
+machine:
+  # Kernel modules required for Kubernetes, CNI, and KubeVirt
+  kernel:
+    modules:
+      # Container runtime and storage
+      - name: overlay
+      - name: br_netfilter
+
+      # NAT and iptables
+      - name: iptable_nat
+      - name: xt_conntrack
+
+      # IPVS for load balancing
+      - name: ip_vs
+      - name: ip_vs_rr
+      - name: ip_vs_wrr
+      - name: ip_vs_sh
+
+      # Connection tracking
+      - name: nf_conntrack
+
+      # KubeVirt/Virtualization support (Intel VT-x)
+      - name: kvm              # Hardware virtualization base
+      - name: kvm_intel        # Intel VT-x specific features
+      - name: vhost_net        # Network acceleration for VMs
+      - name: vhost_vsock      # vsock for VM-host communication
+      - name: tun              # Tunnel device for VM networking
+
+      # Longhorn storage support
+      - name: iscsi_tcp        # iSCSI initiator for Longhorn
+      - name: nbd              # Network Block Device for Longhorn
+
+      # Overlay networking (Cilium, Multus)
+      - name: vxlan
+      - name: geneve
+      - name: ip_tunnel
+      - name: udp_tunnel
+
+      # Multus & Network bridges
+      - name: bridge           # Linux bridge support
+      - name: veth             # Virtual ethernet pairs
+      - name: macvlan          # MAC-based VLANs for Multus
+      - name: ipvlan           # IP-based VLANs (alternative to macvlan)
+
+      # Bonding for LACP
+      - name: bonding
+
+  # Kernel parameters (sysctl)
+  sysctls:
+    # IP forwarding for CNI
+    net.ipv4.ip_forward: "1"
+    net.ipv6.conf.all.forwarding: "1"
+
+    # Bridge netfilter
+    net.bridge.bridge-nf-call-iptables: "1"
+    net.bridge.bridge-nf-call-ip6tables: "1"
+
+    # Network buffers (128MB for high throughput)
+    net.core.rmem_max: "134217728"
+    net.core.wmem_max: "134217728"
+    net.core.rmem_default: "67108864"
+    net.core.wmem_default: "67108864"
+    net.core.optmem_max: "67108864"
+    net.core.netdev_max_backlog: "250000"
+
+    # Connection tracking
+    net.netfilter.nf_conntrack_max: "1000000"
+    net.netfilter.nf_conntrack_tcp_timeout_established: "86400"
+
+    # ARP cache (for larger clusters)
+    net.ipv4.neigh.default.gc_thresh1: "80000"
+    net.ipv4.neigh.default.gc_thresh2: "90000"
+    net.ipv4.neigh.default.gc_thresh3: "100000"
+
+    # Memory map count (for Elasticsearch, Longhorn)
+    vm.max_map_count: "262144"
+
+    # File descriptor limits
+    fs.file-max: "2097152"
+    fs.inotify.max_user_watches: "524288"
+    fs.inotify.max_user_instances: "512"
+
+    # Disable swap (Kubernetes requirement)
+    vm.swappiness: "0"
+
+    # KubeVirt optimizations
+    vm.overcommit_memory: "1"
+    kernel.panic: "10"
+    kernel.panic_on_oops: "1"
+
+  # Disk configuration with encryption
+  disks:
+    - device: /dev/disk/by-id/*  # Will be auto-detected by size
+      partitions:
+        - mountpoint: /var/mnt/longhorn
+
+  # Install configuration
+  install:
+    image: ghcr.io/siderolabs/installer:{{TALOS_VERSION}}
+    wipe: false
+
+    # Disk selection:
+    # IMPORTANT: Verify disk path after USB boot using: ./scripts/discover-disks.sh <node-ip>
+    # Then update this config with the correct disk path
+    #
+    # Option 1: Auto-select by size (smaller NVMe for OS)
+    # Note: Size must be in bytes! 1TB = 1099511627776 bytes
+    diskSelector:
+      size: "<= 644245094400"  # 600GB in bytes (for OS disk)
+      type: nvme
+
+    # Option 2: Specify exact disk path (more reliable, uncomment and update)
+    # disk: /dev/nvme0n1  # Example: Use discover-disks.sh to find correct path
+
+    # Extensions (system tools required for infrastructure components)
+    extensions:
+      - image: ghcr.io/siderolabs/qemu-guest-agent:{{TALOS_VERSION}}    # For KubeVirt VMs
+      - image: ghcr.io/siderolabs/iscsi-tools:{{TALOS_VERSION}}         # For Longhorn storage
+      - image: ghcr.io/siderolabs/util-linux-tools:{{TALOS_VERSION}}    # For Longhorn (nsenter, mount)
+
+  # Kubelet configuration
+  kubelet:
+    # Extra mounts for Longhorn storage
+    extraMounts:
+      - destination: /var/lib/longhorn
+        type: bind
+        source: /var/lib/longhorn
+        options:
+          - bind
+          - rshared
+          - rw
+
+  # Network configuration
+  network:
+    hostname: {{HOSTNAME}}
+
+    # Nameservers (will be replaced with YAML array by build script)
+    nameservers:
+{{DNS_SERVERS_ARRAY}}
+
+    # Interfaces
+    interfaces:
+      # Management interface (DHCP) - eno1
+      - interface: eno1
+        dhcp: true
+
+      # Bond interface for cluster network
+      - interface: bond0
+        bond:
+          mode: 802.3ad  # LACP
+          lacpRate: fast
+          miimon: 100
+          xmitHashPolicy: layer3+4
+          interfaces:
+            - enp1s0
+            - enp1s0d1
+
+      # VLAN 100 on bond0 for cluster traffic
+      - interface: bond0.100
+        vlan:
+          vlanId: 100
+        addresses:
+          - {{NODE_IP}}/24
+        # Routes are automatically created for directly connected networks
+
+      # Physical interfaces (enslaved to bond)
+      - interface: enp1s0
+        ignore: true
+      - interface: enp1s0d1
+        ignore: true
+
+  # Time synchronization
+  time:
+    servers:
+{{NTP_SERVERS_ARRAY}}
+
+    bootTimeout: 2m0s
+
+  # Features
+  features:
+    # Enable KubePrism (local LB for API server)
+    kubePrism:
+      enabled: true
+      port: 7445
+
+    # Enable host DNS
+    hostDNS:
+      enabled: true
+      forwardKubeDNSToHost: false
+
+# Cluster configuration
+cluster:
+  # Cluster name
+  clusterName: homelab
+
+  # Control plane endpoint (VIP)
+  controlPlane:
+    endpoint: https://{{VIP_ADDRESS}}:6443
+
+  # Network configuration
+  network:
+    # CNI configuration (Cilium - installed via Helm)
+    cni:
+      name: none  # We'll install Cilium manually via ArgoCD
+
+    # Pod and Service CIDRs (match RKE2 setup)
+    podSubnets:
+      - 10.1.0.0/16
+    serviceSubnets:
+      - 10.2.0.0/16
+
+    # DNS domain
+    dnsDomain: cluster.local
+
+  # Proxy configuration (disabled - Cilium replaces kube-proxy)
+  proxy:
+    disabled: true
+
+  # Allow scheduling on control plane (for 3-node cluster)
+  allowSchedulingOnControlPlanes: true
+
+  # API Server configuration
+  apiServer:
+    certSANs:
+      - {{VIP_ADDRESS}}
+      - 10.0.100.101
+      - 10.0.100.102
+      - 10.0.100.103
+      - 127.0.0.1
+
+  # Discovery configuration
+  discovery:
+    enabled: true
+    registries:
+      kubernetes:
+        disabled: false
+      service:
+        disabled: false
+
+  # Inline manifests (deployed before CNI)
+  inlineManifests:
+    # Cilium will be installed via ArgoCD after bootstrap
+    # KubeVirt, Longhorn, Multus will be installed via ArgoCD (GitOps)

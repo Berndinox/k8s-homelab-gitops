@@ -7,13 +7,7 @@ secrets.env
 *.crt
 *-key.yaml
 
-# CoreOS Ignition files (contain embedded secrets)
-*.ign
-
-# CoreOS generated configs
-coreos/generated/
-
-# Fedora CoreOS downloads
+# OS ISO Files
 *.iso
 *.iso.sig
 
@@ -28,11 +22,9 @@ coreos/generated/
 *.swp
 *.swo
 
-# Terraform (if used)
-.terraform/
-*.tfstate
-*.tfstate.backup
-
 # Temporary files
 tmp/
 temp/
+
+# Claude
+.claude

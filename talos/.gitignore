@@ -1,0 +1,20 @@
+# Secrets - NEVER commit these!
+secrets.env
+secrets/secrets.yaml
+secrets/talosconfig
+
+# Generated configs with embedded secrets
+configs/*.yaml
+
+# Generated patches
+configs/patches/*.yaml
+
+# Backup configs
+configs/backup/
+*.backup
+
+# Temporary files
+*.tmp
+*.swp
+*~
+.DS_Store

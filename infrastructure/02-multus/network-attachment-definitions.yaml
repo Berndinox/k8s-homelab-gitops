@@ -1,0 +1,222 @@
+---
+# Multus NetworkAttachmentDefinitions for all VLANs
+# These allow pods/VMs to attach to specific VLANs on the bond0 trunk
+
+# VLAN 5 - WAN (External)
+---
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata:
+  name: vlan5-wan
+  namespace: default
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  config: |
+    {
+      "cniVersion": "0.3.1",
+      "type": "macvlan",
+      "master": "bond0.5",
+      "mode": "bridge",
+      "ipam": {
+        "type": "whereabouts",
+        "range": "10.0.5.0/24",
+        "gateway": "10.0.5.1",
+        "routes": [
+          { "dst": "0.0.0.0/0" }
+        ]
+      }
+    }
+
+---
+# VLAN 10 - DMZ/Public Services
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata:
+  name: vlan10-dmz
+  namespace: default
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  config: |
+    {
+      "cniVersion": "0.3.1",
+      "type": "macvlan",
+      "master": "bond0.10",
+      "mode": "bridge",
+      "ipam": {
+        "type": "whereabouts",
+        "range": "10.0.10.0/24",
+        "gateway": "10.0.10.1",
+        "routes": [
+          { "dst": "0.0.0.0/0" }
+        ]
+      }
+    }
+
+---
+# VLAN 30 - WIFI Network
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata:
+  name: vlan30-wifi
+  namespace: default
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  config: |
+    {
+      "cniVersion": "0.3.1",
+      "type": "macvlan",
+      "master": "bond0.30",
+      "mode": "bridge",
+      "ipam": {
+        "type": "whereabouts",
+        "range": "10.0.30.0/24",
+        "gateway": "10.0.30.1",
+        "routes": [
+          { "dst": "0.0.0.0/0" }
+        ]
+      }
+    }
+
+---
+# VLAN 40 - Client Network
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata:
+  name: vlan40-client
+  namespace: default
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  config: |
+    {
+      "cniVersion": "0.3.1",
+      "type": "macvlan",
+      "master": "bond0.40",
+      "mode": "bridge",
+      "ipam": {
+        "type": "whereabouts",
+        "range": "10.0.40.0/24",
+        "gateway": "10.0.40.1",
+        "routes": [
+          { "dst": "0.0.0.0/0" }
+        ]
+      }
+    }
+
+---
+# VLAN 50 - Server Network
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata:
+  name: vlan50-server
+  namespace: default
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  config: |
+    {
+      "cniVersion": "0.3.1",
+      "type": "macvlan",
+      "master": "bond0.50",
+      "mode": "bridge",
+      "ipam": {
+        "type": "whereabouts",
+        "range": "10.0.50.0/24",
+        "gateway": "10.0.50.1",
+        "routes": [
+          { "dst": "0.0.0.0/0" }
+        ]
+      }
+    }
+
+---
+# VLAN 60 - WiFi Secure Network
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata:
+  name: vlan60-wifi-secure
+  namespace: default
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  config: |
+    {
+      "cniVersion": "0.3.1",
+      "type": "macvlan",
+      "master": "bond0.60",
+      "mode": "bridge",
+      "ipam": {
+        "type": "whereabouts",
+        "range": "10.0.60.0/24",
+        "gateway": "10.0.60.1",
+        "routes": [
+          { "dst": "0.0.0.0/0" }
+        ]
+      }
+    }
+
+---
+# VLAN 100 - Cluster/Internal Network (already used by nodes)
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata:
+  name: vlan100-cluster
+  namespace: default
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  labels:
+    app: multus
+    network: cluster-internal
+spec:
+  config: |
+    {
+      "cniVersion": "0.3.1",
+      "type": "macvlan",
+      "master": "bond0.100",
+      "mode": "bridge",
+      "ipam": {
+        "type": "whereabouts",
+        "range": "10.0.100.0/24",
+        "range_start": "10.0.100.150",
+        "range_end": "10.0.100.254",
+        "gateway": "10.0.100.1",
+        "routes": [
+          { "dst": "0.0.0.0/0" }
+        ],
+        "exclude": [
+          "10.0.100.101/32",
+          "10.0.100.102/32",
+          "10.0.100.103/32",
+          "10.0.100.111/32"
+        ]
+      }
+    }
+
+---
+# VLAN 200 - Management/Monitoring Network
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata:
+  name: vlan200-monitoring
+  namespace: default
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  config: |
+    {
+      "cniVersion": "0.3.1",
+      "type": "macvlan",
+      "master": "bond0.200",
+      "mode": "bridge",
+      "ipam": {
+        "type": "whereabouts",
+        "range": "10.0.200.0/24",
+        "gateway": "10.0.200.1",
+        "routes": [
+          { "dst": "0.0.0.0/0" }
+        ]
+      }
+    }

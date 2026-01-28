@@ -1,0 +1,91 @@
+# Talos Controlplane Configuration for host03
+# This is the bootstrap/first controlplane node
+
+machine:
+  type: controlplane
+
+  network:
+    hostname: host03
+    interfaces:
+      - interface: bond0.100
+        vip:
+          ip: {{VIP_ADDRESS}}
+
+  # SSH Extension configuration (optional but recommended)
+  # Requires siderolabs/talos-extensions-ssh
+  features:
+    rbac: true
+
+cluster:
+  # Controlplane-specific settings
+  controllerManager:
+    extraArgs:
+      bind-address: 0.0.0.0
+      node-cidr-mask-size: "24"
+
+  scheduler:
+    extraArgs:
+      bind-address: 0.0.0.0
+
+  # etcd configuration
+  etcd:
+    # Advertise on cluster network (VLAN 100)
+    advertisedSubnets:
+      - 10.0.100.0/24
+
+    # Extra args for performance
+    extraArgs:
+      listen-metrics-urls: http://0.0.0.0:2381
+      heartbeat-interval: "250"
+      election-timeout: "2500"
+      quota-backend-bytes: "8589934592"  # 8GB
+      max-request-bytes: "10485760"       # 10MB
+
+  # API Server configuration
+  apiServer:
+    extraArgs:
+      # Security
+      anonymous-auth: "false"
+      audit-log-maxage: "30"
+      audit-log-maxbackup: "10"
+      audit-log-maxsize: "100"
+
+      # Performance
+      max-requests-inflight: "400"
+      max-mutating-requests-inflight: "200"
+
+      # Features for KubeVirt
+      feature-gates: "MixedProtocolLBService=true"
+
+    admissionControl:
+      - name: PodSecurity
+        configuration:
+          apiVersion: pod-security.admission.config.k8s.io/v1alpha1
+          kind: PodSecurityConfiguration
+          defaults:
+            enforce: "baseline"
+            enforce-version: "latest"
+            audit: "restricted"
+            audit-version: "latest"
+            warn: "restricted"
+            warn-version: "latest"
+          exemptions:
+            usernames: []
+            runtimeClasses: []
+            namespaces:
+              - kube-system
+              - longhorn-system
+              - kubevirt
+
+  # Extra manifests for VIP (using shared IP via VIP operator)
+  inlineManifests:
+    - name: vip-config
+      contents: |
+        apiVersion: v1
+        kind: ConfigMap
+        metadata:
+          name: kubevip-config
+          namespace: kube-system
+        data:
+          vip_address: "{{VIP_ADDRESS}}"
+          vip_interface: "bond0.100"
