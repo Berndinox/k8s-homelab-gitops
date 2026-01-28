@@ -1,11 +1,27 @@
 # Talos Bootstrap Flow
 
-Visuelle Darstellung des Bootstrap-Prozesses für das Talos Homelab Cluster.
+> **⚠️ NOTE:** This document describes the OLD manual bootstrap process.
+>
+> **The cluster now uses Hybrid Bootstrap** where Cilium, ArgoCD, and Root App deploy automatically via inline manifests embedded in the Talos config.
+>
+> **For the current workflow, see:** [INSTALL.md](INSTALL.md)
+>
+> This document is kept for reference only.
 
-## Übersicht
+---
+
+Visuelle Darstellung des **alten** manuellen Bootstrap-Prozesses für das Talos Homelab Cluster.
+
+## Übersicht (OLD)
 
 ```
 USB Boot → Talos Installation → K8s Bootstrap → Cilium (Helm) → ArgoCD → GitOps Infrastructure
+```
+
+**NEW (Automated):**
+
+```
+USB Boot → Talos Installation → K8s Bootstrap → AUTOMATIC: Cilium + ArgoCD + GitOps (via inline manifests)
 ```
 
 ## Detaillierter Ablauf

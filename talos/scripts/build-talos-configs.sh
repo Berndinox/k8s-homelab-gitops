@@ -10,6 +10,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TALOS_DIR="$(dirname "${SCRIPT_DIR}")"
 CONFIGS_DIR="${TALOS_DIR}/configs"
 SECRETS_DIR="${TALOS_DIR}/secrets"
+MANIFESTS_DIR="${TALOS_DIR}/manifests"
 SECRETS_FILE="${TALOS_DIR}/secrets.env"
 
 # Talos version (latest stable)
@@ -93,6 +94,31 @@ generate_secrets() {
     fi
 }
 
+# Generate inline manifests for bootstrap
+generate_inline_manifests() {
+    log_info "Generating inline manifests (Cilium, ArgoCD, Root App)..."
+
+    # Run the generate script
+    bash "${SCRIPT_DIR}/generate-inline-manifests.sh"
+
+    # Verify manifests exist
+    if [[ ! -f "${MANIFESTS_DIR}/cilium-inline.yaml" ]] || \
+       [[ ! -f "${MANIFESTS_DIR}/argocd-inline.yaml" ]] || \
+       [[ ! -f "${MANIFESTS_DIR}/root-app-inline.yaml" ]]; then
+        log_error "Failed to generate inline manifests"
+        exit 1
+    fi
+
+    log_info "✓ Inline manifests generated successfully"
+}
+
+# Helper function to indent YAML content for inline manifests
+# Adds 8 spaces to each line (for inline manifest contents)
+indent_manifest() {
+    local manifest_file="$1"
+    sed 's/^/        /' "${manifest_file}"
+}
+
 # Replace template variables in a file
 replace_variables() {
     local input_file="$1"
@@ -137,6 +163,39 @@ replace_variables() {
     ntp_array=$(echo -e "${ntp_array}" | sed '$ d')
     # Replace placeholder
     sed -i "s@{{NTP_SERVERS_ARRAY}}@${ntp_array}@g" "${temp_file}"
+
+    # Replace inline manifest placeholders (only for controlplane)
+    if [[ "${input_file}" == *"controlplane"* ]]; then
+        log_info "  Embedding inline manifests..."
+
+        # Create temporary files with indented manifests
+        local cilium_indented=$(mktemp)
+        local argocd_indented=$(mktemp)
+        local rootapp_indented=$(mktemp)
+
+        indent_manifest "${MANIFESTS_DIR}/cilium-inline.yaml" > "${cilium_indented}"
+        indent_manifest "${MANIFESTS_DIR}/argocd-inline.yaml" > "${argocd_indented}"
+        indent_manifest "${MANIFESTS_DIR}/root-app-inline.yaml" > "${rootapp_indented}"
+
+        # Use awk to replace multi-line placeholders
+        # This is more reliable than sed for large multi-line replacements
+        awk -v cilium="$(cat "${cilium_indented}")" \
+            '{gsub(/{{CILIUM_INLINE_MANIFEST}}/, cilium)}1' "${temp_file}" > "${temp_file}.tmp"
+        mv "${temp_file}.tmp" "${temp_file}"
+
+        awk -v argocd="$(cat "${argocd_indented}")" \
+            '{gsub(/{{ARGOCD_INLINE_MANIFEST}}/, argocd)}1' "${temp_file}" > "${temp_file}.tmp"
+        mv "${temp_file}.tmp" "${temp_file}"
+
+        awk -v rootapp="$(cat "${rootapp_indented}")" \
+            '{gsub(/{{ROOT_APP_INLINE_MANIFEST}}/, rootapp)}1' "${temp_file}" > "${temp_file}.tmp"
+        mv "${temp_file}.tmp" "${temp_file}"
+
+        # Cleanup
+        rm -f "${cilium_indented}" "${argocd_indented}" "${rootapp_indented}"
+
+        log_info "  ✓ Inline manifests embedded"
+    fi
 
     # Move to output
     mv "${temp_file}" "${output_file}"
@@ -254,6 +313,7 @@ main() {
     check_talosctl
     load_secrets
     generate_secrets
+    generate_inline_manifests
     generate_talosconfig
 
     log_info ""
@@ -279,25 +339,33 @@ main() {
     log_info ""
     log_info "✓ All configurations generated successfully!"
     log_info ""
+    log_info "Inline manifests embedded in controlplane config:"
+    log_info "  • Cilium CNI (full featured)"
+    log_info "  • ArgoCD GitOps operator"
+    log_info "  • Root-of-roots application"
+    log_info ""
     log_info "Next steps:"
     log_info "  1. Review generated configs in: ${CONFIGS_DIR}/"
     log_info "  2. Create bootable USB with Talos:"
-    log_info "     talosctl image default --arch amd64"
-    log_info "  3. Write to USB:"
-    log_info "     sudo dd if=talos-amd64.iso of=/dev/sdX bs=4M status=progress"
-    log_info "  4. Boot host03 from USB and apply config:"
+    log_info "     Download: https://github.com/siderolabs/talos/releases/download/${TALOS_VERSION}/metal-amd64.iso"
+    log_info "     Write with Rufus (Windows) or dd (Linux/macOS)"
+    log_info "  3. Boot host03 from USB and apply config:"
     log_info "     talosctl apply-config --insecure --nodes 10.0.100.103 --file ${CONFIGS_DIR}/host03.yaml"
-    log_info "  5. Bootstrap Kubernetes on host03:"
+    log_info "  4. Bootstrap Kubernetes on host03:"
     log_info "     talosctl bootstrap --nodes 10.0.100.103 --endpoints 10.0.100.103 --talosconfig ${SECRETS_DIR}/talosconfig"
-    log_info "  6. Get kubeconfig:"
+    log_info "  5. Wait for cluster to become ready (~3-5 min):"
     log_info "     talosctl kubeconfig --nodes ${VIP_ADDRESS} --endpoints ${VIP_ADDRESS} --talosconfig ${SECRETS_DIR}/talosconfig"
-    log_info "  7. Install Cilium CNI (BEFORE ArgoCD):"
-    log_info "     ./scripts/install-cilium.sh"
-    log_info "  8. Bootstrap GitOps (ArgoCD):"
-    log_info "     ./scripts/bootstrap-gitops.sh"
-    log_info "  9. Join host01 and host02:"
+    log_info "     kubectl get nodes -w"
+    log_info "  6. Wait for Cilium and ArgoCD to deploy (automatic via inline manifests):"
+    log_info "     kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=cilium -n kube-system --timeout=5m"
+    log_info "     kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=argocd-server -n argocd --timeout=5m"
+    log_info "  7. Verify infrastructure deployment via ArgoCD:"
+    log_info "     kubectl get applications -n argocd"
+    log_info "  8. Join host01 and host02 to cluster:"
     log_info "     talosctl apply-config --insecure --nodes 10.0.100.101 --file ${CONFIGS_DIR}/host01.yaml"
     log_info "     talosctl apply-config --insecure --nodes 10.0.100.102 --file ${CONFIGS_DIR}/host02.yaml"
+    log_info ""
+    log_info "That's it! Cilium, ArgoCD, and all infrastructure will deploy automatically."
 }
 
 main "$@"

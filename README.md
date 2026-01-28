@@ -43,7 +43,7 @@
 
 ## Quick Start
 
-**Prerequisites:** 3x bare-metal servers, USB stick, 20-40 minutes
+**Prerequisites:** 3x bare-metal servers, USB stick, 15-30 minutes
 
 ```bash
 # 1. Clone repo
@@ -54,31 +54,28 @@ cd k8s-homelab-gitops/talos
 cp secrets.env.example secrets.env
 nano secrets.env  # Add SSH key, VIP, optional encryption
 
-# 3. Generate Talos configs
+# 3. Generate Talos configs (includes Cilium + ArgoCD inline manifests)
 ./scripts/build-talos-configs.sh all
 
-# 4. Create bootable USB
-talosctl image default --arch amd64
-sudo dd if=talos-amd64.iso of=/dev/sdX bs=4M status=progress
+# 4. Create bootable USB (Windows: use Rufus, Linux/macOS: dd)
+# Download: https://github.com/siderolabs/talos/releases/download/v1.9.3/metal-amd64.iso
 
 # 5. Boot host03 from USB, apply config
 talosctl apply-config --insecure --nodes 10.0.100.103 --file configs/host03.yaml
 
-# 6. Bootstrap Kubernetes
+# 6. Bootstrap Kubernetes (Cilium + ArgoCD deploy automatically!)
 talosctl bootstrap --nodes 10.0.100.103 --endpoints 10.0.100.103
 talosctl kubeconfig --nodes 10.0.100.111
 
-# 7. Install Cilium CNI (BEFORE ArgoCD!)
-./scripts/install-cilium.sh
+# 7. Wait for automatic deployment (~3-5 min)
+kubectl get nodes -w  # Wait for Ready
+kubectl get pods -A   # Cilium, ArgoCD, Infrastructure
 
-# 8. Bootstrap ArgoCD + GitOps
-./scripts/bootstrap-gitops.sh
-
-# 9. Join worker nodes
+# 8. Join worker nodes
 talosctl apply-config --insecure --nodes 10.0.100.101 --file configs/host01.yaml
 talosctl apply-config --insecure --nodes 10.0.100.102 --file configs/host02.yaml
 
-# Done! 🚀
+# Done! Everything deployed automatically via GitOps! 🚀
 ```
 
 **Full setup guide:** [talos/README.md](talos/README.md)
@@ -94,10 +91,13 @@ talosctl apply-config --insecure --nodes 10.0.100.102 --file configs/host02.yaml
 - **Secure by Design**: Minimal attack surface, no package manager
 
 ### 🔄 GitOps Automation
-- **ArgoCD**: Auto-deployed after Cilium bootstrap
-- **Sync Waves**: Guaranteed deployment order (Cilium → Namespaces → Longhorn → Multus → KubeVirt → Apps)
+
+- **ArgoCD**: Auto-deployed via inline manifests at bootstrap time
+- **Zero Manual Steps**: Cilium, ArgoCD, and Root App deploy automatically
+- **Sync Waves**: Guaranteed deployment order (Cilium → Longhorn → Multus → KubeVirt → Apps)
 - **Self-Healing**: Git is source of truth, auto-sync enabled
 - **App of Apps**: Single root app manages everything
+- **Hybrid Bootstrap**: Combines Talos inline manifests with ArgoCD adoption
 
 ### 🌐 Advanced Networking
 - **Cilium CNI**: eBPF-based, kube-proxy replacement
@@ -167,6 +167,8 @@ k8s-homelab-gitops/
 
 ## Deployment Flow
 
+**Fully Automated:** Cilium, ArgoCD, and all infrastructure deploy automatically!
+
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │ PHASE 1: USB Boot & OS Installation (~5-10 min)                             │
@@ -179,52 +181,38 @@ k8s-homelab-gitops/
                                  │
                                  ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ PHASE 2: Kubernetes Bootstrap (host03) (~5-10 min)                          │
+│ PHASE 2: Kubernetes Bootstrap - FULLY AUTOMATED! (~3-5 min)                 │
 ├─────────────────────────────────────────────────────────────────────────────┤
+│  Command: talosctl bootstrap --nodes 10.0.100.103                           │
+│                                                                             │
+│  Automatically deployed via inline manifests:                               │
 │  1. Network configuration (bond0 + VLAN 100)                                │
-│  2. Kubernetes control plane starts (etcd, API server)                      │
+│  2. Kubernetes control plane (etcd, API server)                             │
 │  3. VIP active (10.0.100.111 via KubePrism)                                 │
-│  4. Get kubeconfig → Node shows NotReady (no CNI yet!)                      │
+│  4. ✅ Cilium CNI (full featured: BGP, Gateway API, Hubble)                  │
+│  5. ✅ ArgoCD GitOps operator                                                │
+│  6. ✅ Root-of-roots App (points to argocd-apps/)                            │
+│                                                                             │
+│  Node becomes Ready! No manual steps needed!                                │
 └────────────────────────────────┬────────────────────────────────────────────┘
                                  │
                                  ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ PHASE 3: Cilium CNI Installation (~2-5 min)                                 │
+│ PHASE 3: Infrastructure Deployment (GitOps Sync Waves)                      │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│  CRITICAL: Cilium MUST be installed BEFORE ArgoCD!                          │
-│  • ./scripts/install-cilium.sh (Helm install)                               │
-│  • Cilium DaemonSet deployed                                                │
-│  • Node becomes Ready                                                       │
-│  • Pods can now start!                                                      │
-└────────────────────────────────┬────────────────────────────────────────────┘
-                                 │
-                                 ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ PHASE 4: ArgoCD Bootstrap (~3-10 min)                                       │
-├─────────────────────────────────────────────────────────────────────────────┤
-│  1. ./scripts/bootstrap-gitops.sh                                           │
-│  2. ArgoCD deployed as Pods (CNI available!)                                │
-│  3. Root App created (bootstrap/root-app.yaml)                              │
-│  4. ArgoCD adopts existing Cilium installation (no redeployment)            │
-│  5. Infrastructure App syncs                                                │
-└────────────────────────────────┬────────────────────────────────────────────┘
-                                 │
-                                 ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ PHASE 5: Infrastructure Deployment (GitOps Sync Waves)                      │
-├─────────────────────────────────────────────────────────────────────────────┤
-│  Wave -5: Cilium (adopted from Helm install)                                │
-│  Wave  0: Namespaces                                                        │
+│  ArgoCD automatically deploys infrastructure via sync waves:                │
+│                                                                             │
+│  Wave -5: Cilium (adopted from inline manifest)                             │
 │  Wave  1: Longhorn (Storage)                              ~10-15 min        │
 │  Wave  2: Multus (Multi-NIC)                                                │
 │  Wave  3: KubeVirt (VMs)                                                    │
 │                                                                             │
-│  Bootstrap script waits for infrastructure health                           │
+│  All fully automated via GitOps!                                            │
 └────────────────────────────────┬────────────────────────────────────────────┘
                                  │
                                  ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ PHASE 6: Application Deployment (GitOps Sync Wave 10)                       │
+│ PHASE 4: Application Deployment (GitOps Sync Wave 10)                       │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │  • Automatic deployment of apps/                        ~Variable           │
 │  • Only starts after infrastructure is healthy                              │
@@ -232,7 +220,7 @@ k8s-homelab-gitops/
                                  │
                                  ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ PHASE 7: Join Worker Nodes (host01, host02)                                 │
+│ PHASE 5: Join Worker Nodes (host01, host02)                                 │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │  1. Boot from USB                                                           │
 │  2. Apply worker config                                  ~5 min per node    │
@@ -241,7 +229,9 @@ k8s-homelab-gitops/
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Total Time:** ~20-45 minutes from bare metal to fully operational 3-node cluster
+**Total Time:** ~15-35 minutes from bare metal to fully operational 3-node cluster
+
+**Key Benefit:** Zero manual steps after `talosctl bootstrap` - everything deploys automatically!
 
 **Key Difference to other setups:** Cilium is installed **manually via Helm first**, then ArgoCD adopts it for ongoing management. This solves the chicken-egg problem (ArgoCD needs CNI to run as pods).
 

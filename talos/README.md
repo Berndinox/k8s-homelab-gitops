@@ -1,6 +1,14 @@
 # Talos Linux Kubernetes Homelab
 
-This directory contains Talos Linux configurations for a 3-node Kubernetes homelab cluster with GitOps automation via ArgoCD.
+This directory contains Talos Linux configurations for a 3-node Kubernetes homelab cluster with **fully automated** GitOps deployment.
+
+## 🚀 Quick Start
+
+**Want to get started quickly?** See **[INSTALL.md](INSTALL.md)** for the complete step-by-step guide.
+
+**Key Feature:** Everything deploys automatically! Cilium, ArgoCD, and all infrastructure are embedded in the Talos config and deploy automatically when you run `talosctl bootstrap`.
+
+---
 
 ## Overview
 

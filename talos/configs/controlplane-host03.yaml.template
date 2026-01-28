@@ -77,8 +77,10 @@ cluster:
               - longhorn-system
               - kubevirt
 
-  # Extra manifests for VIP (using shared IP via VIP operator)
+  # Inline manifests for bootstrap
+  # These are deployed automatically when the cluster bootstraps
   inlineManifests:
+    # VIP Configuration
     - name: vip-config
       contents: |
         apiVersion: v1
@@ -89,3 +91,21 @@ cluster:
         data:
           vip_address: "{{VIP_ADDRESS}}"
           vip_interface: "bond0.100"
+
+    # Cilium CNI - Full installation with all features
+    # Deployed at bootstrap time, later managed by ArgoCD
+    - name: cilium
+      contents: |
+{{CILIUM_INLINE_MANIFEST}}
+
+    # ArgoCD - GitOps operator
+    # Deployed at bootstrap time to enable GitOps workflow
+    - name: argocd
+      contents: |
+{{ARGOCD_INLINE_MANIFEST}}
+
+    # Root App - ArgoCD App-of-Apps pattern
+    # Points to argocd-apps/ directory for infrastructure and apps
+    - name: root-app
+      contents: |
+{{ROOT_APP_INLINE_MANIFEST}}

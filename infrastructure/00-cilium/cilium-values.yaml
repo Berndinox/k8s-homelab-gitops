@@ -1,0 +1,169 @@
+# Cilium Helm Values
+# Used for both inline manifest generation and ArgoCD GitOps management
+# These values must be identical to ensure smooth adoption
+
+# IPAM Configuration
+ipam:
+  mode: kubernetes
+
+# eBPF kube-proxy replacement
+kubeProxyReplacement: true
+k8sServiceHost: localhost  # Talos uses localhost proxy (KubePrism)
+k8sServicePort: 7445       # Talos KubePrism port
+
+# Talos-specific settings
+securityContext:
+  capabilities:
+    ciliumAgent:
+      - CHOWN
+      - KILL
+      - NET_ADMIN
+      - NET_RAW
+      - IPC_LOCK
+      - SYS_ADMIN
+      - SYS_RESOURCE
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+    cleanCiliumState:
+      - NET_ADMIN
+      - SYS_ADMIN
+      - SYS_RESOURCE
+
+cgroup:
+  autoMount:
+    enabled: false
+  hostRoot: /sys/fs/cgroup
+
+# BGP Control Plane (for advanced routing)
+bgpControlPlane:
+  enabled: true
+
+# Load Balancer Mode
+loadBalancer:
+  mode: hybrid
+  acceleration: native
+
+# Native routing (no overlay)
+routingMode: native
+autoDirectNodeRoutes: true
+ipv4NativeRoutingCIDR: 10.1.0.0/16
+enableIPv4Masquerade: true
+enableIPv6Masquerade: false
+
+# eBPF Masquerading
+bpf:
+  masquerade: true
+  tproxy: true
+
+# Endpoint routes
+endpointRoutes:
+  enabled: true
+
+# Hubble (Network Observability)
+hubble:
+  enabled: true
+
+  relay:
+    enabled: true
+    replicas: 1
+
+  ui:
+    enabled: true
+    replicas: 1
+    ingress:
+      enabled: false  # Configure via Gateway API later
+
+  metrics:
+    enabled:
+      - dns:query
+      - drop
+      - tcp
+      - flow
+      - icmp
+      - http
+    serviceMonitor:
+      enabled: false  # Enable if Prometheus is installed
+    dashboards:
+      enabled: false  # Enable if Grafana is installed
+
+# Gateway API Support (for L7 policies)
+gatewayAPI:
+  enabled: true
+
+# Enable IPv4 (IPv6 disabled for this setup)
+ipv4:
+  enabled: true
+ipv6:
+  enabled: false
+
+# Operator configuration
+operator:
+  replicas: 1
+  prometheus:
+    enabled: false  # Enable if Prometheus is installed
+
+# Prometheus metrics
+prometheus:
+  enabled: false  # Enable if Prometheus is installed
+
+# CNI Configuration
+cni:
+  install: true
+  exclusive: true
+  chainingMode: none
+  customConf: false
+
+# Bandwidth Manager (for rate limiting)
+bandwidthManager:
+  enabled: true
+  bbr: true
+
+# Host firewall
+hostFirewall:
+  enabled: true
+
+# Encryption (disabled for performance, enable if needed)
+encryption:
+  enabled: false
+  type: wireguard
+
+# Local Redirect Policy (for efficient local traffic)
+localRedirectPolicy: true
+
+# KubeVirt support (hostPort mapping for VMs)
+hostPort:
+  enabled: true
+
+# Security
+policyEnforcementMode: default
+
+# Resource limits
+resources:
+  limits:
+    cpu: 4000m
+    memory: 4Gi
+  requests:
+    cpu: 500m
+    memory: 512Mi
+
+# Node selector (run on all nodes)
+nodeSelector:
+  kubernetes.io/os: linux
+
+# Tolerate all taints (run on control plane too)
+tolerations:
+  - operator: Exists
+
+# Pod disruption budget
+pdb:
+  enabled: false  # Disable for 3-node cluster
+
+# Rollout strategy
+rolloutMaxUnavailable: 1
+rollOutCiliumPods: true
+
+# Debug (disable in production)
+debug:
+  enabled: false
