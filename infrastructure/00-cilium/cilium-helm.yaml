@@ -23,7 +23,7 @@ spec:
   source:
     chart: cilium
     repoURL: https://helm.cilium.io/
-    targetRevision: 1.16.5  # Must match version in inline manifests
+    targetRevision: 1.18.6  # Must match version in inline manifests
     helm:
       # Values from cilium-values.yaml (synchronized)
       values: |

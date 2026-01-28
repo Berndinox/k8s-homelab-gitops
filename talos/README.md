@@ -4,471 +4,277 @@ This directory contains Talos Linux configurations for a 3-node Kubernetes homel
 
 ## 🚀 Quick Start
 
-**Want to get started quickly?** See **[INSTALL.md](INSTALL.md)** for the complete step-by-step guide.
+**Want to get started?** See **[INSTALL.md](INSTALL.md)** for the complete step-by-step installation guide.
 
-**Key Feature:** Everything deploys automatically! Cilium, ArgoCD, and all infrastructure are embedded in the Talos config and deploy automatically when you run `talosctl bootstrap`.
+**Key Feature:** Everything deploys automatically! Cilium, ArgoCD, and all infrastructure are embedded as inline manifests in the Talos config and deploy automatically when you run `talosctl bootstrap`.
 
 ---
 
-## Overview
+## What is Talos Linux?
 
-**Talos Linux** is an immutable, minimal Linux distribution designed specifically for Kubernetes. It provides:
-- Secure, hardened OS (no SSH by default, API-only management)
-- Immutable infrastructure (no shell access by default)
-- Declarative configuration
-- Built-in security best practices
-- Fast boot times and updates
+**Talos Linux** is an immutable, minimal Linux distribution designed specifically for Kubernetes:
 
-## Architecture
+- **Secure by Design**: No SSH by default, API-only management
+- **Immutable**: No shell access, no package manager, fully declarative
+- **Minimal Attack Surface**: Only runs Kubernetes, nothing else
+- **Fast**: Quick boot times and updates
+- **Kubernetes-Native**: Built specifically for running Kubernetes
 
-### Infrastructure Components
+---
 
-- **3 Nodes:** host01 (worker), host02 (worker), host03 (controlplane)
-- **Kubernetes Distribution:** Talos-native (latest stable)
-- **CNI:** Cilium with eBPF (kube-proxy replacement)
-- **Storage:** Longhorn (distributed storage)
-- **Networking:** Multus (multi-NIC support)
-- **Virtualization:** KubeVirt (KVM-based VMs)
-- **GitOps:** ArgoCD
+## Architecture Overview
 
-### Network Configuration
+### Cluster Configuration
+
+- **3-Node HA Control Plane**: All nodes are both control plane and worker
+  - **All nodes** have inline manifests (Cilium, ArgoCD, Root App) embedded
+  - **Any node** can be used as the bootstrap node (recommended: host03)
+  - **Other nodes** join the existing etcd cluster automatically
+- **VIP**: 10.0.100.111 (High-availability API endpoint via KubePrism)
+- **Kubernetes**: Talos-native (latest stable, currently v1.35.0 via Talos v1.12.1)
+
+### Infrastructure Stack
+
+- **CNI**: Cilium with eBPF (kube-proxy replacement, BGP, Gateway API, Hubble)
+- **Storage**: Longhorn (distributed block storage, 3x replication)
+- **Networking**: Multus (multi-NIC support for VMs)
+- **Virtualization**: KubeVirt (KVM-based VMs)
+- **GitOps**: ArgoCD (auto-deployed, manages all infrastructure)
+
+### Network Layout
 
 #### Management Network (eno1)
+
 - DHCP-assigned IPs for host management
 
 #### Cluster Network (bond0.100)
-- **Bond0:** LACP 802.3ad bonding (enp1s0 + enp1s0d1)
-- **VLAN 100:** Cluster traffic isolation
-- **IPs:**
-  - host01: 10.0.100.101/24
-  - host02: 10.0.100.102/24
-  - host03: 10.0.100.103/24
-  - VIP (API): 10.0.100.111/24
+
+- **Bond0**: LACP 802.3ad bonding (enp1s0 + enp1s0d1) = 20G aggregate
+- **VLAN 100**: Cluster traffic isolation
+- **IPs**: 10.0.100.101-103/24 + VIP 10.0.100.111/24
 
 #### Kubernetes Networks
-- **Pod Network:** 10.1.0.0/16 (Cilium)
-- **Service Network:** 10.2.0.0/16
-- **DNS:** CoreDNS at 10.2.0.10
 
-### Storage Configuration
+- **Pod CIDR**: 10.1.0.0/16 (Cilium)
+- **Service CIDR**: 10.2.0.0/16
+- **DNS**: CoreDNS at 10.2.0.10
+
+### Storage Layout
 
 Each node has 2x NVMe disks:
-- **Smaller NVMe (200-600GB):** Talos OS
-- **Larger NVMe (2TB):** Longhorn storage
+
+- **Smaller NVMe (<600GB)**: Talos OS (auto-selected by size)
+- **Larger NVMe (2TB+)**: Longhorn storage
+
+---
 
 ## Directory Structure
 
-```
+```text
 talos/
-├── README.md                           # This file
+├── README.md                           # This file (overview)
+├── INSTALL.md                          # Complete installation guide
 ├── secrets.env.example                 # Template for secrets
-├── .gitignore                          # Git ignore rules
-├── configs/                            # Talos configurations
-│   ├── base-patch.yaml.template        # Common settings for all nodes
-│   ├── controlplane-host03.yaml.template  # Controlplane-specific config
-│   ├── worker-host01.yaml.template     # Worker host01 config
-│   └── worker-host02.yaml.template     # Worker host02 config
+├── configs/                            # Talos machine config templates
+│   ├── base-patch.yaml.template            # Common settings
+│   ├── controlplane-host03.yaml.template   # Control plane node 3
+│   ├── controlplane-host01.yaml.template   # Control plane node 1
+│   └── controlplane-host02.yaml.template   # Control plane node 2
+│   # Note: All nodes have inline manifests - any can bootstrap
+├── manifests/                          # Generated inline manifests (gitignored)
+│   ├── cilium-inline.yaml              # Auto-generated from Helm
+│   ├── argocd-inline.yaml              # Auto-generated from Helm
+│   └── root-app-inline.yaml            # Copy of bootstrap/root-app.yaml
 ├── scripts/                            # Helper scripts
-│   ├── build-talos-configs.sh          # Generate Talos configs
-│   ├── bootstrap-gitops.sh             # Bootstrap ArgoCD and GitOps
+│   ├── build-talos-configs.sh          # Generates configs + inline manifests
+│   ├── generate-inline-manifests.sh    # Generates Cilium/ArgoCD/Root App YAML
 │   └── discover-disks.sh               # Disk discovery helper
 └── secrets/                            # Generated secrets (gitignored)
     ├── secrets.yaml                    # Talos cluster secrets
     └── talosconfig                     # Talos API client config
 ```
 
-## Prerequisites
+---
 
-### Required Software
+## Deployment Flow
 
-1. **talosctl** (Talos CLI)
-   ```bash
-   # Linux
-   curl -sL https://talos.dev/install | sh
+**Fully Automated - Zero Manual Steps After Bootstrap!**
 
-   # macOS
-   brew install siderolabs/tap/talosctl
-   ```
+```text
+1. Generate Configs
+   └─> ./scripts/build-talos-configs.sh all
+       ├─> Generates Talos secrets
+       ├─> Generates inline manifests (Cilium, ArgoCD, Root App)
+       ├─> Embeds manifests into ALL controlplane configs
+       └─> Creates machine configs for all nodes
 
-2. **kubectl** (Kubernetes CLI)
-   ```bash
-   # Linux
-   curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-   chmod +x kubectl && sudo mv kubectl /usr/local/bin/
+2. Boot & Install (any node, recommended: host03)
+   └─> Boot from USB → Apply config → Talos installs to disk
 
-   # macOS
-   brew install kubectl
-   ```
+3. Bootstrap Kubernetes
+   └─> talosctl bootstrap --nodes 10.0.100.103
+       ├─> Kubernetes starts (etcd, API server, scheduler, controller-manager)
+       ├─> VIP activates (10.0.100.111)
+       ├─> Cilium deploys (inline manifest) → CNI ready
+       ├─> ArgoCD deploys (inline manifest) → GitOps ready
+       ├─> Root App deploys (inline manifest) → Points to argocd-apps/
+       └─> ArgoCD syncs infrastructure automatically
 
-3. **USB Flash Drive** (8GB+) for Talos installation
+4. Infrastructure Auto-Deploys (GitOps Sync Waves)
+   ├─> Wave -5: Cilium (adopted from inline manifest)
+   ├─> Wave  1: Longhorn (storage)
+   ├─> Wave  2: Multus (multi-NIC)
+   ├─> Wave  3: KubeVirt (VMs)
+   └─> Wave 10: Apps
 
-### Hardware Requirements
-
-- **3 x Servers** with:
-  - 2x 10G NICs (for LACP bonding)
-  - 2x NVMe disks (OS + storage)
-  - Minimum 16GB RAM (32GB+ recommended for KubeVirt)
-  - CPU with virtualization support (VT-x/AMD-V)
-
-## Quick Start
-
-### 1. Configure Secrets
-
-```bash
-cd talos
-cp secrets.env.example secrets.env
+5. Join Additional Nodes (host01, host02)
+   └─> Boot from USB → Apply config → Auto-join etcd cluster
 ```
 
-Edit `secrets.env` and configure:
-```bash
-# Generate SSH key
-ssh-keygen -t ed25519 -C "talos-homelab"
-cat ~/.ssh/id_ed25519.pub  # Copy to SSH_PUBLIC_KEY
+**Total Time:** ~15-30 minutes from bare metal to fully operational cluster
 
-# Configure VIP (already set to 10.0.100.111)
-VIP_ADDRESS='10.0.100.111'
+---
 
-# Optional: Disk encryption
-DISK_ENCRYPTION_KEY=$(openssl rand -base64 32)
+## Key Features
 
-# Optional: GitOps repo
-GITOPS_REPO='https://github.com/YOUR_USERNAME/k8s-homelab-gitops.git'
-GITOPS_BRANCH='main'
-```
+### Hybrid Bootstrap Pattern
 
-### 2. Generate Talos Configurations
+- **Inline Manifests**: Cilium, ArgoCD, and Root App are embedded directly in Talos config
+- **Auto-Deploy**: Everything deploys automatically at bootstrap time
+- **GitOps Adoption**: ArgoCD adopts Cilium and manages it going forward
+- **Zero Manual Steps**: No chicken-egg problem, no manual installations
+
+### Security
+
+- **API-Only Management**: No SSH by default (use talosctl)
+- **Immutable OS**: No package manager, no shell access
+- **Disk Encryption**: Optional LUKS2 encryption
+- **Pod Security**: Baseline enforcement with exemptions for system namespaces
+- **RBAC**: Enabled by default
+
+### High Availability
+
+- **3-Node etcd Cluster**: All nodes are control plane
+- **VIP**: 10.0.100.111 for API server (no single point of failure)
+- **LACP Bonding**: 20G aggregate bandwidth with failover
+- **Distributed Storage**: Longhorn 3x replication
+
+---
+
+## Quick Commands
+
+### Generate Configurations
 
 ```bash
 cd talos
 ./scripts/build-talos-configs.sh all
 ```
 
-This generates:
-- `configs/host01.yaml` - Worker node 1
-- `configs/host02.yaml` - Worker node 2
-- `configs/host03.yaml` - Controlplane node
-- `secrets/secrets.yaml` - Cluster secrets
-- `secrets/talosconfig` - Talos API client config
-
-### 3. Create Bootable USB
-
-Download Talos ISO:
-```bash
-talosctl image default --arch amd64
-```
-
-Write to USB drive:
-```bash
-# Linux (replace /dev/sdX with your USB device)
-sudo dd if=talos-amd64.iso of=/dev/sdX bs=4M status=progress && sync
-
-# macOS (replace /dev/diskX with your USB device)
-sudo dd if=talos-amd64.iso of=/dev/diskX bs=4m && sync
-```
-
-### 4. Install Talos on host03 (Controlplane)
-
-1. **Boot host03 from USB**
-2. **Discover disk layout** (optional):
-   ```bash
-   ./scripts/discover-disks.sh 10.0.100.103
-   ```
-3. **Apply configuration:**
-   ```bash
-   talosctl apply-config --insecure \
-     --nodes 10.0.100.103 \
-     --file configs/host03.yaml
-   ```
-4. **Wait for installation** (2-5 minutes)
-
-### 5. Bootstrap Kubernetes
+### Bootstrap Cluster (host03)
 
 ```bash
-# Export talosconfig
+# Apply config
+talosctl apply-config --insecure --nodes 10.0.100.103 --file configs/host03.yaml
+
+# Bootstrap Kubernetes
 export TALOSCONFIG=$(pwd)/secrets/talosconfig
-
-# Bootstrap Kubernetes on host03
-talosctl bootstrap \
-  --nodes 10.0.100.103 \
-  --endpoints 10.0.100.103
-
-# Wait for API to be ready (5-10 minutes)
-talosctl health --server --nodes 10.0.100.103
+talosctl bootstrap --nodes 10.0.100.103 --endpoints 10.0.100.103
 
 # Get kubeconfig
-talosctl kubeconfig \
-  --nodes 10.0.100.111 \
-  --endpoints 10.0.100.111
+talosctl kubeconfig --nodes 10.0.100.111 --endpoints 10.0.100.111
 ```
 
-### 6. Install Cilium CNI
-
-**IMPORTANT:** Cilium must be installed BEFORE ArgoCD (chicken-egg problem: ArgoCD runs as pods, pods need CNI)
+### Join Additional Nodes
 
 ```bash
-./scripts/install-cilium.sh
+talosctl apply-config --insecure --nodes 10.0.100.101 --file configs/host01.yaml
+talosctl apply-config --insecure --nodes 10.0.100.102 --file configs/host02.yaml
 ```
 
-This will:
-- Install Cilium via Helm
-- Wait for Cilium to be ready
-- Prepare for ArgoCD adoption
+### Verify Deployment
 
-Verify Cilium is running:
 ```bash
-kubectl get pods -n kube-system -l k8s-app=cilium
-kubectl exec -n kube-system ds/cilium -- cilium status
+kubectl get nodes -o wide
+kubectl get pods -A
+kubectl get applications -n argocd
 ```
 
-### 7. Bootstrap GitOps (ArgoCD)
+---
+
+## Management
+
+### Talos Commands
 
 ```bash
-./scripts/bootstrap-gitops.sh
+# Node logs
+talosctl logs kubelet --nodes 10.0.100.103
+
+# Service status
+talosctl services --nodes 10.0.100.103
+
+# Network interfaces
+talosctl get links --nodes 10.0.100.103
+
+# Node reboot
+talosctl reboot --nodes 10.0.100.103
+
+# Upgrade Talos
+talosctl upgrade --nodes 10.0.100.103 --image ghcr.io/siderolabs/installer:v1.9.4
 ```
 
-This will:
-1. Check Cilium is ready
-2. Install ArgoCD
-3. Create root GitOps application
-4. Bootstrap infrastructure (Longhorn, Multus, KubeVirt)
-
-After ArgoCD is running, it will adopt the existing Cilium installation and manage it via GitOps going forward.
-
-### 8. Join Worker Nodes
-
-Repeat for host01 and host02:
-
-1. **Boot from USB**
-2. **Apply configuration:**
-   ```bash
-   talosctl apply-config --insecure \
-     --nodes 10.0.100.101 \
-     --file configs/host01.yaml
-
-   talosctl apply-config --insecure \
-     --nodes 10.0.100.102 \
-     --file configs/host02.yaml
-   ```
-3. **Verify nodes joined:**
-   ```bash
-   kubectl get nodes -o wide
-   ```
-
-## Post-Installation
-
-### Access ArgoCD UI
+### Kubernetes Access
 
 ```bash
-# Get admin password
+# ArgoCD UI
+kubectl port-forward svc/argocd-server -n argocd 8080:443
+
+# Get ArgoCD admin password
 kubectl -n argocd get secret argocd-initial-admin-secret \
   -o jsonpath="{.data.password}" | base64 -d
 
-# Port-forward
-kubectl port-forward svc/argocd-server -n argocd 8080:443
-
-# Open browser
-open https://localhost:8080
-```
-
-### Access Hubble UI (Cilium)
-
-```bash
+# Hubble UI (Cilium observability)
 kubectl port-forward -n kube-system svc/hubble-ui 12000:80
-open http://localhost:12000
-```
 
-### Verify Infrastructure
-
-```bash
-# Check all pods
-kubectl get pods -A
-
-# Check Cilium status
+# Cilium status
 kubectl exec -n kube-system ds/cilium -- cilium status
-
-# Check Longhorn (after deployed)
-kubectl get pods -n longhorn-system
-
-# Check KubeVirt (after deployed)
-kubectl get pods -n kubevirt
 ```
 
-## Configuration Details
-
-### Cilium Features
-
-- **eBPF kube-proxy replacement** (no iptables)
-- **Hubble** network observability
-- **BGP Control Plane** for advanced routing
-- **Gateway API** for L7 policies
-- **Native routing** (no overlay)
-- **Bandwidth management** with BBR
-- **Host firewall** enabled
-
-### Security Features
-
-- **Disk encryption** (LUKS2, optional)
-- **API-only management** (no SSH)
-- **Immutable OS** (no package manager)
-- **Pod Security Standards** (baseline enforced)
-- **RBAC** enabled
-
-### Network Features
-
-- **LACP bonding** (802.3ad) for 20G aggregate bandwidth
-- **VLAN isolation** for cluster traffic
-- **VIP** for API server high availability
-- **Multus** for multiple network interfaces
-- **Cilium** for pod networking and policies
+---
 
 ## Troubleshooting
 
-### View Talos Logs
+### Quick Diagnostics
 
 ```bash
-# System logs
-talosctl logs --nodes 10.0.100.103
+# Node not Ready
+talosctl logs kubelet --nodes <node-ip>
+kubectl describe node <node-name>
 
-# Kubelet logs
-talosctl logs kubelet --nodes 10.0.100.103
-
-# Service logs
-talosctl logs etcd --nodes 10.0.100.103
-```
-
-### Check Talos Services
-
-```bash
-talosctl services --nodes 10.0.100.103
-```
-
-### Reset a Node
-
-```bash
-# Graceful reset (preserves data)
-talosctl reset --graceful --nodes 10.0.100.103
-
-# Factory reset (wipes everything)
-talosctl reset --wipe --nodes 10.0.100.103
-```
-
-### Check Network Configuration
-
-```bash
-# View network interfaces
-talosctl get links --nodes 10.0.100.103
-
-# View routes
-talosctl get routes --nodes 10.0.100.103
-
-# View addresses
-talosctl get addresses --nodes 10.0.100.103
-```
-
-### Debug Cilium
-
-```bash
-# Cilium status
+# Cilium issues
+kubectl logs -n kube-system ds/cilium -f
 kubectl exec -n kube-system ds/cilium -- cilium status
 
-# Connectivity test
-kubectl exec -n kube-system ds/cilium -- cilium connectivity test
+# ArgoCD issues
+kubectl get applications -n argocd
+kubectl describe application <app-name> -n argocd
 
-# View BGP status
-kubectl exec -n kube-system ds/cilium -- cilium bgp routes
+# Network issues
+talosctl get links --nodes <node-ip>
+talosctl get routes --nodes <node-ip>
 ```
 
-### Common Issues
+For comprehensive troubleshooting, see [COMMON-ISSUES.md](COMMON-ISSUES.md)
 
-#### 1. Node Not Joining Cluster
+---
 
-**Symptoms:** Node shows in `talosctl get members` but not in `kubectl get nodes`
+## Documentation
 
-**Solution:**
-- Check Cilium is running on controlplane
-- Verify network connectivity (ping VIP)
-- Check kubelet logs: `talosctl logs kubelet --nodes <node-ip>`
+- **[INSTALL.md](INSTALL.md)** - Complete step-by-step installation guide
+- **[BOOTSTRAP-FLOW.md](BOOTSTRAP-FLOW.md)** - Visual deployment flow diagram
+- **[COMMON-ISSUES.md](COMMON-ISSUES.md)** - Troubleshooting guide
+- **[CHEATSHEET.md](CHEATSHEET.md)** - talosctl quick reference
 
-#### 2. Cilium Pods Not Starting
-
-**Symptoms:** Cilium pods stuck in `Init` or `CrashLoopBackOff`
-
-**Solution:**
-- Verify kube-proxy is disabled in Talos config
-- Check kernel modules: `talosctl read /proc/modules --nodes <node-ip>`
-- Restart Cilium: `kubectl rollout restart ds/cilium -n kube-system`
-
-#### 3. VIP Not Accessible
-
-**Symptoms:** Cannot reach API server via VIP (10.0.100.111)
-
-**Solution:**
-- Check VIP configuration in controlplane config
-- Verify VLAN interface is up: `talosctl get links --nodes 10.0.100.103`
-- Check routing: `talosctl get routes --nodes 10.0.100.103`
-
-#### 4. Disk Not Detected
-
-**Symptoms:** Talos fails to install, disk not found
-
-**Solution:**
-- Boot from USB and check disks: `./scripts/discover-disks.sh <node-ip>`
-- Update `diskSelector` in base-patch.yaml.template
-- Rebuild configs: `./scripts/build-talos-configs.sh all`
-
-## Maintenance
-
-### Update Talos
-
-```bash
-# Check current version
-talosctl version --nodes 10.0.100.103
-
-# Update (example to v1.9.4)
-talosctl upgrade --nodes 10.0.100.103 \
-  --image ghcr.io/siderolabs/installer:v1.9.4
-
-# Monitor upgrade
-talosctl health --server --nodes 10.0.100.103
-```
-
-### Update Kubernetes
-
-```bash
-# Check current version
-kubectl version --short
-
-# Update via Talos (example to 1.32.0)
-talosctl upgrade-k8s --nodes 10.0.100.103 --to 1.32.0
-```
-
-### Backup etcd
-
-```bash
-talosctl etcd snapshot --nodes 10.0.100.103
-```
-
-### Restore etcd
-
-```bash
-talosctl bootstrap recover --source /path/to/snapshot --nodes 10.0.100.103
-```
-
-## Migration from CoreOS
-
-If migrating from CoreOS (RKE2):
-
-1. **Backup persistent data** from Longhorn
-2. **Export application configs** from ArgoCD
-3. **Follow Quick Start** to deploy Talos cluster
-4. **Restore data** to new Longhorn volumes
-5. **Sync applications** via ArgoCD
-
-Key differences:
-- No Ignition/Butane (use Talos machine configs)
-- No RKE2 (use Talos-native Kubernetes)
-- No SSH by default (use talosctl)
-- Immutable OS (no package installation)
+---
 
 ## Resources
 
@@ -476,16 +282,24 @@ Key differences:
 - [Cilium Documentation](https://docs.cilium.io)
 - [ArgoCD Documentation](https://argo-cd.readthedocs.io)
 - [Longhorn Documentation](https://longhorn.io/docs)
-- [KubeVirt Documentation](https://kubevirt.io/user-guide)
-- [Multus Documentation](https://github.com/k8snetworkplumbingwg/multus-cni)
+- [KubeVirt Documentation](https://kubevirt.io)
+- [Gateway API Documentation](https://gateway-api.sigs.k8s.io)
+
+---
 
 ## Support
 
-For issues specific to this homelab setup, check:
-- Talos logs: `talosctl logs --nodes <node-ip>`
-- Kubernetes events: `kubectl get events -A`
-- ArgoCD UI for application status
+This is a homelab project provided as-is for learning and experimentation.
 
-## License
+**Not for production use.**
 
-This configuration is provided as-is for homelab use.
+For issues:
+
+- Check Talos logs: `talosctl logs --nodes <node-ip>`
+- Check Kubernetes events: `kubectl get events -A`
+- Check ArgoCD UI for application status
+- See [COMMON-ISSUES.md](COMMON-ISSUES.md)
+
+---
+
+Built with ❤️ for homelabs - Powered by Talos Linux, Cilium eBPF, and GitOps best practices

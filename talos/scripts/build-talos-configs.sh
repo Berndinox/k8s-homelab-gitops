@@ -14,7 +14,7 @@ MANIFESTS_DIR="${TALOS_DIR}/manifests"
 SECRETS_FILE="${TALOS_DIR}/secrets.env"
 
 # Talos version (latest stable)
-TALOS_VERSION="v1.9.3"
+TALOS_VERSION="v1.12.1"
 
 # Color output
 RED='\033[0;31m'
@@ -205,20 +205,17 @@ replace_variables() {
 generate_host_config() {
     local host="$1"
     local node_ip=""
-    local machine_type=""
+    local machine_type="controlplane"  # All nodes are controlplane
 
     case "${host}" in
         host01)
             node_ip="10.0.100.101"
-            machine_type="worker"
             ;;
         host02)
             node_ip="10.0.100.102"
-            machine_type="worker"
             ;;
         host03)
             node_ip="10.0.100.103"
-            machine_type="controlplane"
             ;;
         *)
             log_error "Unknown host: ${host}"

@@ -11,18 +11,23 @@
 
 ## Architecture
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                              3-NODE HA CLUSTER                              │
+│                   3-NODE HA CONTROL PLANE CLUSTER                           │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
-│    host01 (Worker)     host02 (Worker)     host03 (Controlplane)            │
+│    All nodes are Control Plane + Worker (full HA)                          │
+│                                                                             │
+│    host01              host02              host03                           │
 │    10.0.100.101        10.0.100.102        10.0.100.103                     │
-│                                            VIP: 10.0.100.111                │
+│    CP + Worker         CP + Worker         CP + Worker                     │
+│    All nodes have inline manifests - any can bootstrap (recommend: host03) │
+│                                                                             │
+│                        VIP: 10.0.100.111 (Shared API endpoint)             │
 │                                                                             │
 │  ┌─────────────────────────────────────────────────────────────────────┐    │
 │  │  Talos Linux (Immutable, API-only)                                  │    │
-│  │  ├─ Kubernetes (Talos-native, vanilla)                              │    │
+│  │  ├─ Kubernetes HA (3x etcd, 3x API server)                          │    │
 │  │  ├─ Cilium CNI (eBPF, Gateway API, Hubble)                          │    │
 │  │  ├─ Longhorn Storage (3x replica)                                   │    │
 │  │  ├─ Multus (multi-NIC)                                              │    │
@@ -58,7 +63,7 @@ nano secrets.env  # Add SSH key, VIP, optional encryption
 ./scripts/build-talos-configs.sh all
 
 # 4. Create bootable USB (Windows: use Rufus, Linux/macOS: dd)
-# Download: https://github.com/siderolabs/talos/releases/download/v1.9.3/metal-amd64.iso
+# Download: https://github.com/siderolabs/talos/releases/download/v1.12.1/metal-amd64.iso
 
 # 5. Boot host03 from USB, apply config
 talosctl apply-config --insecure --nodes 10.0.100.103 --file configs/host03.yaml
@@ -71,7 +76,7 @@ talosctl kubeconfig --nodes 10.0.100.111
 kubectl get nodes -w  # Wait for Ready
 kubectl get pods -A   # Cilium, ArgoCD, Infrastructure
 
-# 8. Join worker nodes
+# 8. Join additional nodes
 talosctl apply-config --insecure --nodes 10.0.100.101 --file configs/host01.yaml
 talosctl apply-config --insecure --nodes 10.0.100.102 --file configs/host02.yaml
 
@@ -85,6 +90,7 @@ talosctl apply-config --insecure --nodes 10.0.100.102 --file configs/host02.yaml
 ## Features
 
 ### 🏗️ Infrastructure as Code
+
 - **Immutable OS**: Talos Linux - API-only, no SSH, fully declarative
 - **Machine Configs**: All settings in YAML, versioned in Git
 - **Automated**: USB boot → config apply → running cluster
@@ -100,6 +106,7 @@ talosctl apply-config --insecure --nodes 10.0.100.102 --file configs/host02.yaml
 - **Hybrid Bootstrap**: Combines Talos inline manifests with ArgoCD adoption
 
 ### 🌐 Advanced Networking
+
 - **Cilium CNI**: eBPF-based, kube-proxy replacement
 - **Gateway API**: Modern L7 policies (successor to Ingress)
 - **LACP Bonding**: 20G aggregate bandwidth (2x 10G)
@@ -109,11 +116,13 @@ talosctl apply-config --insecure --nodes 10.0.100.102 --file configs/host02.yaml
 - **VIP**: High-availability API endpoint (10.0.100.111)
 
 ### 💾 Storage & Compute
+
 - **Longhorn**: Distributed block storage, 3x replication
 - **Multus**: Multi-NIC support for VMs
 - **KubeVirt**: Run VMs alongside containers
 
 ### 🔒 Security First
+
 - **Talos**: No SSH by default, API-only management
 - **Disk Encryption**: Optional LUKS2 encryption
 - **Secrets**: Never committed to Git (.gitignored)
@@ -124,19 +133,18 @@ talosctl apply-config --insecure --nodes 10.0.100.102 --file configs/host02.yaml
 
 ## Repository Structure
 
-```
+```text
 k8s-homelab-gitops/
 ├── talos/                       # 🔧 Talos Linux deployment
 │   ├── configs/                 # Machine config templates
-│   │   ├── base-patch.yaml.template         # Common settings
-│   │   ├── controlplane-host03.yaml.template # Controlplane
-│   │   ├── worker-host01.yaml.template      # Worker 1
-│   │   └── worker-host02.yaml.template      # Worker 2
+│   │   ├── base-patch.yaml.template            # Common settings
+│   │   ├── controlplane-host03.yaml.template   # Bootstrap node
+│   │   ├── controlplane-host01.yaml.template   # Join node 1
+│   │   └── controlplane-host02.yaml.template   # Join node 2
 │   ├── scripts/                 # Helper scripts
-│   │   ├── build-talos-configs.sh    # Config generator
-│   │   ├── install-cilium.sh         # Cilium installer
-│   │   ├── bootstrap-gitops.sh       # ArgoCD bootstrap
-│   │   └── discover-disks.sh         # Disk discovery
+│   │   ├── build-talos-configs.sh         # Generates configs + inline manifests
+│   │   ├── generate-inline-manifests.sh   # Generates Cilium/ArgoCD/Root App YAML
+│   │   └── discover-disks.sh              # Disk discovery helper
 │   ├── secrets/                 # Generated secrets (gitignored)
 │   ├── README.md                # Full installation guide
 │   ├── BOOTSTRAP-FLOW.md        # Visual deployment flow
@@ -169,7 +177,7 @@ k8s-homelab-gitops/
 
 **Fully Automated:** Cilium, ArgoCD, and all infrastructure deploy automatically!
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │ PHASE 1: USB Boot & OS Installation (~5-10 min)                             │
 ├─────────────────────────────────────────────────────────────────────────────┤
@@ -220,11 +228,11 @@ k8s-homelab-gitops/
                                  │
                                  ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ PHASE 5: Join Worker Nodes (host01, host02)                                 │
+│ PHASE 5: Join Additional Nodes (host01, host02)                             │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │  1. Boot from USB                                                           │
-│  2. Apply worker config                                  ~5 min per node    │
-│  3. Auto-join cluster via VIP                                               │
+│  2. Apply controlplane config                            ~5 min per node    │
+│  3. Auto-join etcd cluster and Kubernetes via VIP                           │
 │  4. Cilium DaemonSet deployed automatically                                 │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -232,8 +240,6 @@ k8s-homelab-gitops/
 **Total Time:** ~15-35 minutes from bare metal to fully operational 3-node cluster
 
 **Key Benefit:** Zero manual steps after `talosctl bootstrap` - everything deploys automatically!
-
-**Key Difference to other setups:** Cilium is installed **manually via Helm first**, then ArgoCD adopts it for ongoing management. This solves the chicken-egg problem (ArgoCD needs CNI to run as pods).
 
 ---
 
@@ -313,7 +319,7 @@ kubectl exec -n kube-system ds/cilium -- cilium status
 | **Cilium** | eBPF performance, Gateway API, BGP, Hubble, kube-proxy replacement |
 | **Gateway API** | Modern L7 routing, successor to Ingress, better policies |
 | **ArgoCD** | GitOps standard, declarative, self-healing, easy rollbacks |
-| **Helm → ArgoCD adoption** | Solves chicken-egg (CNI before ArgoCD), keeps GitOps |
+| **Hybrid Bootstrap** | Inline manifests solve chicken-egg problem, ArgoCD adopts for GitOps |
 | **Sync Waves** | Guaranteed deployment order, no manual dependencies |
 | **Longhorn** | Cloud-native storage, 3x replication, snapshots, no external SAN |
 | **VIP** | High availability API, no single point of failure |
@@ -343,12 +349,14 @@ kubectl exec -n kube-system ds/cilium -- cilium status
 ## Documentation
 
 ### Main Guides
+
 - **[Talos Installation Guide](talos/README.md)** - Complete bare-metal setup
 - **[Bootstrap Flow](talos/BOOTSTRAP-FLOW.md)** - Visual deployment process
 - **[Common Issues](talos/COMMON-ISSUES.md)** - Troubleshooting guide
 - **[Talosctl Cheatsheet](talos/CHEATSHEET.md)** - Quick command reference
 
 ### Additional
+
 - **[Infrastructure README](infrastructure/README.md)** - Adding components
 - **[Apps README](apps/README.md)** - Deploying applications
 
@@ -370,7 +378,6 @@ kubectl exec -n kube-system ds/cilium -- cilium status
   - Trunk mode on switch ports
 
 ---
-
 
 ## Troubleshooting
 
@@ -422,6 +429,4 @@ MIT License - See [LICENSE](LICENSE) file for details.
 
 ---
 
-**Built with ❤️ for homelabs**
-
-*Powered by Talos Linux, Cilium eBPF, and GitOps best practices*
+Built with ❤️ for homelabs - Powered by Talos Linux, Cilium eBPF, and GitOps best practices

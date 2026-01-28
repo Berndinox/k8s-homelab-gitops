@@ -215,7 +215,7 @@ Next steps:
 
 1. Download Talos ISO:
    ```
-   https://github.com/siderolabs/talos/releases/download/v1.9.3/metal-amd64.iso
+   https://github.com/siderolabs/talos/releases/download/v1.12.1/metal-amd64.iso
    ```
 2. Open Rufus
 3. Select your USB stick
@@ -228,7 +228,7 @@ Next steps:
 
 ```bash
 # Download ISO
-wget https://github.com/siderolabs/talos/releases/download/v1.9.3/metal-amd64.iso
+wget https://github.com/siderolabs/talos/releases/download/v1.12.1/metal-amd64.iso
 
 # Write to USB (replace /dev/sdX with your USB device!)
 sudo dd if=metal-amd64.iso of=/dev/sdX bs=4M status=progress && sync

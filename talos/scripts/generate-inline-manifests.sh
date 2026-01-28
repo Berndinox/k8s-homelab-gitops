@@ -34,7 +34,7 @@ fi
 # Generate Cilium YAML with values file
 # This ensures inline manifest matches ArgoCD configuration exactly
 helm template cilium cilium/cilium \
-  --version 1.16.5 \
+  --version 1.18.6 \
   --namespace kube-system \
   --values "${CILIUM_VALUES_FILE}" \
   > "${MANIFESTS_DIR}/cilium-inline.yaml"

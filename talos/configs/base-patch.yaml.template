@@ -94,7 +94,10 @@ machine:
 
   # Disk configuration with encryption
   disks:
-    - device: /dev/disk/by-id/*  # Will be auto-detected by size
+    # Data disk for Longhorn (auto-select larger NVMe, non-system disk)
+    - diskSelector:
+        size: ">= 1099511627776"  # 1TB+
+        type: nvme
       partitions:
         - mountpoint: /var/mnt/longhorn
 
@@ -128,11 +131,45 @@ machine:
     extraMounts:
       - destination: /var/lib/longhorn
         type: bind
-        source: /var/lib/longhorn
+        source: /var/mnt/longhorn
         options:
           - bind
           - rshared
           - rw
+    extraArgs:
+      # KubeVirt support
+      feature-gates: "CPUManager=true"
+      cpu-manager-policy: "static"
+      reserved-cpus: "0"
+
+      # Performance
+      max-pods: "250"
+      pod-max-pids: "8192"
+
+      # Node labels
+      node-labels: "node-role.kubernetes.io/control-plane=,node-role.kubernetes.io/worker=,workload.homelab/kubevirt=true"
+
+    # Allow privileged (KubeVirt, Longhorn, Multus)
+    allowedUnsafeSysctls:
+      - "net.*"
+
+    # Eviction thresholds
+    evictionHard:
+      memory.available: "512Mi"
+      nodefs.available: "10%"
+      nodefs.inodesFree: "5%"
+      imagefs.available: "15%"
+
+    # Resource reservations
+    systemReserved:
+      cpu: "500m"
+      memory: "2Gi"
+      ephemeral-storage: "5Gi"
+
+    kubeReserved:
+      cpu: "500m"
+      memory: "2Gi"
+      ephemeral-storage: "5Gi"
 
   # Network configuration
   network:

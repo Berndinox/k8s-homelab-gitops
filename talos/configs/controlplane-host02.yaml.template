@@ -1,18 +1,17 @@
-# Talos Controlplane Configuration for host03
-# This is the bootstrap/first controlplane node
+# Talos Controlplane Configuration for host02
+# This is a join controlplane node (joins host03's etcd cluster)
 
 machine:
   type: controlplane
 
   network:
-    hostname: host03
+    hostname: host02
     interfaces:
       - interface: bond0.100
         vip:
           ip: {{VIP_ADDRESS}}
 
-  # SSH Extension configuration (optional but recommended)
-  # Requires siderolabs/talos-extensions-ssh
+  # Features
   features:
     rbac: true
 
@@ -27,19 +26,17 @@ cluster:
     extraArgs:
       bind-address: 0.0.0.0
 
-  # etcd configuration
+  # etcd configuration (joins existing cluster)
   etcd:
-    # Advertise on cluster network (VLAN 100)
     advertisedSubnets:
       - 10.0.100.0/24
 
-    # Extra args for performance
     extraArgs:
       listen-metrics-urls: http://0.0.0.0:2381
       heartbeat-interval: "250"
       election-timeout: "2500"
-      quota-backend-bytes: "8589934592"  # 8GB
-      max-request-bytes: "10485760"       # 10MB
+      quota-backend-bytes: "8589934592"
+      max-request-bytes: "10485760"
 
   # API Server configuration
   apiServer:
