@@ -138,11 +138,36 @@ git clone https://github.com/Berndinox/k8s-homelab-gitops
 cd k8s-homelab-gitops/talos
 ```
 
-### Step 2: Get Disk IDs (Longhorn data disk)
+### Step 2: Create Bootable USB
+
+**On Windows (Rufus):**
+
+1. Download Talos ISO:
+   ```
+   https://github.com/siderolabs/talos/releases/download/v1.12.1/metal-amd64.iso
+   ```
+2. Open Rufus
+3. Select your USB stick
+4. Select the Talos ISO
+5. Partition scheme: **GPT**
+6. Target system: **UEFI**
+7. Click **START**
+
+**On Linux/macOS:**
+
+```bash
+# Download ISO
+wget https://github.com/siderolabs/talos/releases/download/v1.12.1/metal-amd64.iso
+
+# Write to USB (replace /dev/sdX with your USB device!)
+sudo dd if=metal-amd64.iso of=/dev/sdX bs=4M status=progress && sync
+```
+
+### Step 3: Get Disk IDs (Longhorn data disk)
 
 You need the stable `/dev/disk/by-id/...` path of the **data disk** on each node.
 
-1. Boot the node from the Talos ISO (live mode).
+1. Boot the node from the Talos USB (live mode).
 2. Note the DHCP management IP shown on the console.
 3. From your workstation, run:
 
@@ -155,7 +180,7 @@ Pick the **larger NVMe** (e.g., 1TB+). Repeat for host01/host02/host03.
 
 ---
 
-### Step 3: Configure Secrets
+### Step 4: Configure Secrets
 
 ```bash
 # Copy example file
@@ -190,7 +215,7 @@ GITOPS_REPO="https://github.com/Berndinox/k8s-homelab-gitops"
 GITOPS_BRANCH="main"
 ```
 
-### Step 4: Generate Talos Configurations
+### Step 5: Generate Talos Configurations
 
 This script generates machine configs and **inline manifests** for Cilium, ArgoCD, and Root App.
 
@@ -224,36 +249,11 @@ Inline manifests embedded in controlplane config:
 
 Next steps:
   1. Review generated configs in: configs/
-  2. Create bootable USB with Talos
+  2. Boot host03 from USB and apply config
   ...
 ```
 
-### Step 5: Create Bootable USB
-
-**On Windows (Rufus):**
-
-1. Download Talos ISO:
-   ```
-   https://github.com/siderolabs/talos/releases/download/v1.12.1/metal-amd64.iso
-   ```
-2. Open Rufus
-3. Select your USB stick
-4. Select the Talos ISO
-5. Partition scheme: **GPT**
-6. Target system: **UEFI**
-7. Click **START**
-
-**On Linux/macOS:**
-
-```bash
-# Download ISO
-wget https://github.com/siderolabs/talos/releases/download/v1.12.1/metal-amd64.iso
-
-# Write to USB (replace /dev/sdX with your USB device!)
-sudo dd if=metal-amd64.iso of=/dev/sdX bs=4M status=progress && sync
-```
-
-### Step 5: Boot and Configure host03 (Controlplane)
+### Step 6: Boot and Configure host03 (Controlplane)
 
 1. **Insert USB** into host03
 2. **Boot from USB** (configure BIOS to boot UEFI, disable Secure Boot)
@@ -278,7 +278,7 @@ talosctl apply-config \
 - Node reboots automatically
 - Wait 2-3 minutes for installation to complete
 
-### Step 6: Bootstrap Kubernetes (AUTOMATIC DEPLOYMENT!)
+### Step 7: Bootstrap Kubernetes (AUTOMATIC DEPLOYMENT!)
 
 ```bash
 # Bootstrap Kubernetes on host03
@@ -305,7 +305,7 @@ talosctl bootstrap \
 
 **Total time:** ~3-5 minutes for bootstrap, ~10-15 minutes for full infrastructure
 
-### Step 7: Get Kubeconfig
+### Step 8: Get Kubeconfig
 
 ```bash
 # Fetch kubeconfig from VIP
