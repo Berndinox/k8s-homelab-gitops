@@ -70,10 +70,6 @@ load_secrets() {
         exit 1
     fi
 
-    if [[ -z "${SSH_PUBLIC_KEY:-}" ]]; then
-        log_warn "SSH_PUBLIC_KEY not set - SSH access will not be configured"
-    fi
-
     # Set defaults
     DNS_SERVERS="${DNS_SERVERS:-8.8.8.8,8.8.4.4}"
     NTP_SERVERS="${NTP_SERVERS:-pool.ntp.org}"
@@ -125,6 +121,7 @@ replace_variables() {
     local output_file="$2"
     local hostname="$3"
     local node_ip="$4"
+    local longhorn_disk="$5"
 
     log_info "Processing template: ${input_file} -> ${output_file}"
 
@@ -139,8 +136,9 @@ replace_variables() {
     sed -i "s|{{HOSTNAME}}|${hostname}|g" "${temp_file}"
     sed -i "s|{{NODE_IP}}|${node_ip}|g" "${temp_file}"
     sed -i "s|{{VIP_ADDRESS}}|${VIP_ADDRESS}|g" "${temp_file}"
+    sed -i "s|{{LONGHORN_DISK}}|${longhorn_disk}|g" "${temp_file}"
 
-    # Convert DNS_SERVERS (comma-separated) to YAML array
+    # Convert DNS_SERVERS (comma-separated) to YAML array (multiline-safe)
     local dns_array=""
     IFS=',' read -ra DNS_ARRAY <<< "${DNS_SERVERS}"
     for dns in "${DNS_ARRAY[@]}"; do
@@ -149,10 +147,8 @@ replace_variables() {
     done
     # Remove trailing newline
     dns_array=$(echo -e "${dns_array}" | sed '$ d')
-    # Replace placeholder (using @ as delimiter because of slashes in sed)
-    sed -i "s@{{DNS_SERVERS_ARRAY}}@${dns_array}@g" "${temp_file}"
 
-    # Convert NTP_SERVERS (comma-separated) to YAML array
+    # Convert NTP_SERVERS (comma-separated) to YAML array (multiline-safe)
     local ntp_array=""
     IFS=',' read -ra NTP_ARRAY <<< "${NTP_SERVERS}"
     for ntp in "${NTP_ARRAY[@]}"; do
@@ -161,8 +157,13 @@ replace_variables() {
     done
     # Remove trailing newline
     ntp_array=$(echo -e "${ntp_array}" | sed '$ d')
-    # Replace placeholder
-    sed -i "s@{{NTP_SERVERS_ARRAY}}@${ntp_array}@g" "${temp_file}"
+
+    # Replace placeholders using awk (portable for multiline content)
+    awk -v dns="$dns_array" '{gsub(/{{DNS_SERVERS_ARRAY}}/, dns)}1' "${temp_file}" > "${temp_file}.tmp"
+    mv "${temp_file}.tmp" "${temp_file}"
+
+    awk -v ntp="$ntp_array" '{gsub(/{{NTP_SERVERS_ARRAY}}/, ntp)}1' "${temp_file}" > "${temp_file}.tmp"
+    mv "${temp_file}.tmp" "${temp_file}"
 
     # Replace inline manifest placeholders (only for controlplane)
     if [[ "${input_file}" == *"controlplane"* ]]; then
@@ -177,18 +178,35 @@ replace_variables() {
         indent_manifest "${MANIFESTS_DIR}/argocd-inline.yaml" > "${argocd_indented}"
         indent_manifest "${MANIFESTS_DIR}/root-app-inline.yaml" > "${rootapp_indented}"
 
-        # Use awk to replace multi-line placeholders
-        # This is more reliable than sed for large multi-line replacements
-        awk -v cilium="$(cat "${cilium_indented}")" \
-            '{gsub(/{{CILIUM_INLINE_MANIFEST}}/, cilium)}1' "${temp_file}" > "${temp_file}.tmp"
+        # Use awk to replace multi-line placeholders without interpreting escape sequences
+        awk -v placeholder='{{CILIUM_INLINE_MANIFEST}}' -v file="${cilium_indented}" '
+            BEGIN {
+                while ((getline line < file) > 0) { cilium = cilium line "\n" }
+                close(file)
+            }
+            { gsub(placeholder, cilium) }
+            1
+        ' "${temp_file}" > "${temp_file}.tmp"
         mv "${temp_file}.tmp" "${temp_file}"
 
-        awk -v argocd="$(cat "${argocd_indented}")" \
-            '{gsub(/{{ARGOCD_INLINE_MANIFEST}}/, argocd)}1' "${temp_file}" > "${temp_file}.tmp"
+        awk -v placeholder='{{ARGOCD_INLINE_MANIFEST}}' -v file="${argocd_indented}" '
+            BEGIN {
+                while ((getline line < file) > 0) { argocd = argocd line "\n" }
+                close(file)
+            }
+            { gsub(placeholder, argocd) }
+            1
+        ' "${temp_file}" > "${temp_file}.tmp"
         mv "${temp_file}.tmp" "${temp_file}"
 
-        awk -v rootapp="$(cat "${rootapp_indented}")" \
-            '{gsub(/{{ROOT_APP_INLINE_MANIFEST}}/, rootapp)}1' "${temp_file}" > "${temp_file}.tmp"
+        awk -v placeholder='{{ROOT_APP_INLINE_MANIFEST}}' -v file="${rootapp_indented}" '
+            BEGIN {
+                while ((getline line < file) > 0) { rootapp = rootapp line "\n" }
+                close(file)
+            }
+            { gsub(placeholder, rootapp) }
+            1
+        ' "${temp_file}" > "${temp_file}.tmp"
         mv "${temp_file}.tmp" "${temp_file}"
 
         # Cleanup
@@ -206,6 +224,7 @@ generate_host_config() {
     local host="$1"
     local node_ip=""
     local machine_type="controlplane"  # All nodes are controlplane
+    local longhorn_disk=""
 
     case "${host}" in
         host01)
@@ -225,8 +244,17 @@ generate_host_config() {
 
     log_info "Generating configuration for ${host} (${machine_type}, IP: ${node_ip})"
 
-    # Create merged config file
-    local merged_config="${CONFIGS_DIR}/${host}-merged.yaml"
+    # Resolve per-host Longhorn disk ID
+    local host_upper="${host^^}"
+    local longhorn_var="LONGHORN_DISK_${host_upper}"
+    longhorn_disk="${!longhorn_var:-${LONGHORN_DISK:-}}"
+
+    if [[ -z "${longhorn_disk}" ]]; then
+        log_error "Longhorn disk not set for ${host}"
+        log_error "Set ${longhorn_var} or LONGHORN_DISK in secrets.env"
+        exit 1
+    fi
+
     local base_patch="${CONFIGS_DIR}/base-patch.yaml"
     local host_patch="${CONFIGS_DIR}/${machine_type}-${host}.yaml"
 
@@ -235,44 +263,52 @@ generate_host_config() {
         "${CONFIGS_DIR}/base-patch.yaml.template" \
         "${base_patch}" \
         "${host}" \
-        "${node_ip}"
+        "${node_ip}" \
+        "${longhorn_disk}"
 
     # Process host-specific patch
     replace_variables \
         "${CONFIGS_DIR}/${machine_type}-${host}.yaml.template" \
         "${host_patch}" \
         "${host}" \
-        "${node_ip}"
+        "${node_ip}" \
+        "${longhorn_disk}"
 
     # Generate final config using talosctl
     log_info "Generating final machine config for ${host}..."
 
+    local output_file="${CONFIGS_DIR}/${machine_type}.yaml"
     talosctl gen config homelab "https://${VIP_ADDRESS}:6443" \
         --with-secrets "${SECRETS_DIR}/secrets.yaml" \
-        --output "${CONFIGS_DIR}" \
+        --output "${output_file}" \
         --output-types "${machine_type}" \
         --force
 
-    # Rename generated file
-    if [[ "${machine_type}" == "controlplane" ]]; then
+    # Normalize generated file name
+    if [[ -f "${output_file}" ]]; then
+        mv "${output_file}" "${CONFIGS_DIR}/${host}.yaml"
+    elif [[ "${machine_type}" == "controlplane" && -f "${CONFIGS_DIR}/controlplane.yaml" ]]; then
         mv "${CONFIGS_DIR}/controlplane.yaml" "${CONFIGS_DIR}/${host}.yaml"
-    else
+    elif [[ "${machine_type}" != "controlplane" && -f "${CONFIGS_DIR}/worker.yaml" ]]; then
         mv "${CONFIGS_DIR}/worker.yaml" "${CONFIGS_DIR}/${host}.yaml"
+    else
+        log_error "Expected generated config not found for ${host}"
+        exit 1
     fi
 
-    # Merge with patches
+    # Apply patches sequentially (avoid duplicate top-level keys)
     log_info "Applying patches to ${host} config..."
 
-    # Create a combined patch file
-    cat "${base_patch}" "${host_patch}" > "${merged_config}"
-
-    # Apply patch (this will merge the configs)
     talosctl machineconfig patch "${CONFIGS_DIR}/${host}.yaml" \
-        --patch @"${merged_config}" \
+        --patch @"${base_patch}" \
+        --output "${CONFIGS_DIR}/${host}.yaml"
+
+    talosctl machineconfig patch "${CONFIGS_DIR}/${host}.yaml" \
+        --patch @"${host_patch}" \
         --output "${CONFIGS_DIR}/${host}.yaml"
 
     # Cleanup temporary files
-    rm -f "${base_patch}" "${host_patch}" "${merged_config}"
+    rm -f "${base_patch}" "${host_patch}"
 
     log_info "✓ Configuration generated: ${CONFIGS_DIR}/${host}.yaml"
 }
@@ -287,7 +323,7 @@ generate_talosconfig() {
         talosctl gen config homelab "https://${VIP_ADDRESS}:6443" \
             --with-secrets "${SECRETS_DIR}/secrets.yaml" \
             --output-types talosconfig \
-            --output "${SECRETS_DIR}" \
+            --output "${talosconfig_file}" \
             --force
 
         log_info "✓ talosconfig generated: ${talosconfig_file}"

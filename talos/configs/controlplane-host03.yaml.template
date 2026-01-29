@@ -4,15 +4,6 @@
 machine:
   type: controlplane
 
-  network:
-    hostname: host03
-    interfaces:
-      - interface: bond0.100
-        vip:
-          ip: {{VIP_ADDRESS}}
-
-  # SSH Extension configuration (optional but recommended)
-  # Requires siderolabs/talos-extensions-ssh
   features:
     rbac: true
 

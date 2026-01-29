@@ -154,14 +154,16 @@ nano secrets.env
 # VIP for API server high availability
 VIP_ADDRESS="10.0.100.111"
 
-# SSH public key for Talos access (optional but recommended)
-SSH_PUBLIC_KEY="ssh-ed25519 AAAAC3... user@host"
-
 # DNS servers (comma-separated)
 DNS_SERVERS="8.8.8.8,8.8.4.4"
 
 # NTP servers (comma-separated)
 NTP_SERVERS="pool.ntp.org"
+
+# Longhorn data disks (per host, by-id)
+LONGHORN_DISK_HOST01="/dev/disk/by-id/REPLACE_ME"
+LONGHORN_DISK_HOST02="/dev/disk/by-id/REPLACE_ME"
+LONGHORN_DISK_HOST03="/dev/disk/by-id/REPLACE_ME"
 
 # Disk encryption (optional)
 DISK_ENCRYPTION_KEY=""  # Leave empty to disable

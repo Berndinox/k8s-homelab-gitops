@@ -4,13 +4,6 @@
 machine:
   type: controlplane
 
-  network:
-    hostname: host01
-    interfaces:
-      - interface: bond0.100
-        vip:
-          ip: {{VIP_ADDRESS}}
-
   # Features
   features:
     rbac: true

@@ -94,10 +94,9 @@ machine:
 
   # Disk configuration with encryption
   disks:
-    # Data disk for Longhorn (auto-select larger NVMe, non-system disk)
-    - diskSelector:
-        size: ">= 1099511627776"  # 1TB+
-        type: nvme
+    # Data disk for Longhorn (set explicit disk by ID)
+    # Find it via: talosctl --insecure --nodes <IP> ls /dev/disk/by-id/
+    - device: {{LONGHORN_DISK}}
       partitions:
         - mountpoint: /var/mnt/longhorn
 
@@ -149,27 +148,23 @@ machine:
       # Node labels
       node-labels: "node-role.kubernetes.io/control-plane=,node-role.kubernetes.io/worker=,workload.homelab/kubevirt=true"
 
-    # Allow privileged (KubeVirt, Longhorn, Multus)
-    allowedUnsafeSysctls:
-      - "net.*"
-
-    # Eviction thresholds
-    evictionHard:
-      memory.available: "512Mi"
-      nodefs.available: "10%"
-      nodefs.inodesFree: "5%"
-      imagefs.available: "15%"
-
-    # Resource reservations
-    systemReserved:
-      cpu: "500m"
-      memory: "2Gi"
-      ephemeral-storage: "5Gi"
-
-    kubeReserved:
-      cpu: "500m"
-      memory: "2Gi"
-      ephemeral-storage: "5Gi"
+    # Kubelet config overrides
+    extraConfig:
+      allowedUnsafeSysctls:
+        - "net.*"
+      evictionHard:
+        memory.available: "512Mi"
+        nodefs.available: "10%"
+        nodefs.inodesFree: "5%"
+        imagefs.available: "15%"
+      systemReserved:
+        cpu: "500m"
+        memory: "2Gi"
+        ephemeral-storage: "5Gi"
+      kubeReserved:
+        cpu: "500m"
+        memory: "2Gi"
+        ephemeral-storage: "5Gi"
 
   # Network configuration
   network:
@@ -195,14 +190,12 @@ machine:
           interfaces:
             - enp1s0
             - enp1s0d1
-
-      # VLAN 100 on bond0 for cluster traffic
-      - interface: bond0.100
-        vlan:
-          vlanId: 100
-        addresses:
-          - {{NODE_IP}}/24
-        # Routes are automatically created for directly connected networks
+        vlans:
+          - vlanId: 100
+            addresses:
+              - {{NODE_IP}}/24
+            vip:
+              ip: {{VIP_ADDRESS}}
 
       # Physical interfaces (enslaved to bond)
       - interface: enp1s0
