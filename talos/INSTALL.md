@@ -138,7 +138,24 @@ git clone https://github.com/Berndinox/k8s-homelab-gitops
 cd k8s-homelab-gitops/talos
 ```
 
-### Step 2: Configure Secrets
+### Step 2: Get Disk IDs (Longhorn data disk)
+
+You need the stable `/dev/disk/by-id/...` path of the **data disk** on each node.
+
+1. Boot the node from the Talos ISO (live mode).
+2. Note the DHCP management IP shown on the console.
+3. From your workstation, run:
+
+```bash
+talosctl --insecure --nodes <MGMT-IP> ls /dev/disk/by-id/
+talosctl --insecure --nodes <MGMT-IP> disks
+```
+
+Pick the **larger NVMe** (e.g., 1TB+). Repeat for host01/host02/host03.
+
+---
+
+### Step 3: Configure Secrets
 
 ```bash
 # Copy example file
@@ -173,7 +190,7 @@ GITOPS_REPO="https://github.com/Berndinox/k8s-homelab-gitops"
 GITOPS_BRANCH="main"
 ```
 
-### Step 3: Generate Talos Configurations
+### Step 4: Generate Talos Configurations
 
 This script generates machine configs and **inline manifests** for Cilium, ArgoCD, and Root App.
 
@@ -211,7 +228,7 @@ Next steps:
   ...
 ```
 
-### Step 4: Create Bootable USB
+### Step 5: Create Bootable USB
 
 **On Windows (Rufus):**
 
